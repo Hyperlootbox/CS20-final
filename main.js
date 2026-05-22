@@ -548,8 +548,8 @@ class Ball {
             force.y = (mouse.y - y) / mag * followK - vy * followC
         } else if (!structureMove.active) {
             if (type == 'bloon' && connections.length) {
-                force.x -= gravity.x * 40
-                force.y -= gravity.y * 40
+                force.x -= gravity.x * 20
+                force.y -= gravity.y * 20
             } else {
                 force.x += gravity.x * mass
                 force.y += gravity.y * mass
@@ -668,7 +668,7 @@ class Ball {
                         let rvx = vx - other.vx
                         let rvy = vy - other.vy
                         let rv = rvx * nx + rvy * ny
-                        let k = other.type=='bloon'||type=='bloon'?0.1:3; // ball stiffness
+                        let k = other.type == 'bloon' || type == 'bloon' ? 0.1 : 3; // ball stiffness
                         let fnet = max(0, inside * k - 1 * (mass * k) ** 0.5 * rv)
                         force.x += fnet * nx
                         force.y += fnet * ny
@@ -691,7 +691,8 @@ class Ball {
             let dy = y - other.y
             let distance = dist(x, y, other.x, other.y)
             let stretch = connection.length - distance
-            if (stretch / connection.strength > 50) {
+            if (connection.type == 'bloon' && stretch > 0) stretch = 0
+            if (abs(stretch / connection.strength) > 50) {
                 connection.remove();
                 continue
             }
@@ -705,6 +706,9 @@ class Ball {
             let rvy = vy - other.vy
             let rv = rvx * nx + rvy * ny
             let fnet = stretch * connection.strength - connection.damp * rv
+            if (connection.type == 'bloon') {
+                fnet = min(fnet, 0)
+            }
             force.x += fnet * nx
             force.y += fnet * ny
         }
@@ -766,7 +770,7 @@ class Ball {
         let rvx = vx - wind.vx
         let rvy = vy - wind.vy
         let rvmag = dist(rvx, rvy)
-        let m = type == 'bloon' ? 40 : 1
+        let m = type == 'bloon' ? 80 : 1
         force.x -= wind.drag * rvmag * rvx * m
         force.y -= wind.drag * rvmag * rvy * m
 
@@ -829,7 +833,7 @@ class Ball {
             floatingText('z', x + randint(-40, 20), y, 20, 1)
         }
 
-        if (norm(force.x, force.y) < sq(surfaceStick?.sticky || 0)) {
+        if (norm(force.x, force.y) < sq(surfaceStick?.sticky || 0) && type != 'bloon') {
             force.x = 0
             force.y = 0
             vx = 0
@@ -924,7 +928,7 @@ class Ball {
                         }
                         structureMove.currentConnection = next.suckPath
                     } else {
-                        let possible = next.connections.sort((c2, c1) => {
+                        let possible = next.connections.slice().sort((c2, c1) => {
                             let b1 = c1.other(next)
                             let b2 = c2.other(next)
                             return norm(b1.x, b1.y, mouse.x, mouse.y) - norm(b2.x, b2.y, mouse.x, mouse.y)
@@ -1606,7 +1610,7 @@ class Mouse {
             }
         }
         closestBalls = closestBalls.filter(b => norm(b.x, b.y, x, y) <= sq(maxConnectionLen)).sort((a, b) => norm(a.x, a.y, x, y) - norm(b.x, b.y, x, y))
-        if (closestBalls.length >= 2) {
+        if (draggedBall.type != 'bloon' && closestBalls.length >= 2) {
             for (let i = 0; i < closestBalls.length - 1; i++) {
                 for (let j = i + 1; j < closestBalls.length; j++) {
                     let b1 = closestBalls[i]
@@ -1686,7 +1690,7 @@ class Mouse {
             while (draggedBall.connections.length) {
                 draggedBall.connections[0].remove()
             }
-            if (levelStats.collectedBalls<levelStats.minBalls) levelStats.moves++
+            if (levelStats.collectedBalls < levelStats.minBalls) levelStats.moves++
         }
         if (mouse[0] && !mouse.last[0] && !draggedBall) {
             this.draggedBall = closestBall
@@ -1712,7 +1716,7 @@ class Mouse {
                 if (norm(draggedBall.vx, draggedBall.vy) < 50) {
                     draggedBall.vx = 0
                     draggedBall.vy = 0
-                    if (connections.length && levelStats.collectedBalls<levelStats.minBalls) levelStats.moves++
+                    if (connections.length && levelStats.collectedBalls < levelStats.minBalls) levelStats.moves++
                     if (connections.lineConnection) {
                         connect(connections[0], connections[1], draggedBall)
                         draggedBall.remove()
@@ -2058,17 +2062,17 @@ class Button {
             if (id == 'ballsTarget') {
                 text('The amout of balls you collected', x + 90, y - 20, 16)
                 text('Challenge: ' + levelStats.targetBalls + " balls or more", x + 90, y + 30, 16)
-                text('Best: ' + levelChallenges[level].balls + " balls", x + 90, y + 50, 16)
+                levelChallenges[level] && text('Best: ' + levelChallenges[level].balls + " balls", x + 90, y + 50, 16)
             } else if (id == 'movesTarget') {
                 text('The amout of moves you used to', x + 90, y - 20, 16)
                 text('complete the level', x + 90, y, 16)
                 text('Challenge: ' + levelStats.targetMoves + " moves or less", x + 90, y + 30, 16)
-                text('Best: ' + levelChallenges[level].moves + " moves", x + 90, y + 50, 16)
+                levelChallenges[level] && text('Best: ' + levelChallenges[level].moves + " moves", x + 90, y + 50, 16)
             } else if (id == 'timeTarget') {
                 text('The amout of time you used to', x + 90, y - 20, 16)
                 text('complete the level', x + 90, y, 16)
                 text('Challenge: ' + levelStats.targetTime + " seconds or less", x + 90, y + 30, 16)
-                text('Best: ' + floor(levelChallenges[level].time / 1000) + " seconds", x + 90, y + 50, 16)
+                levelChallenges[level] && text('Best: ' + floor(levelChallenges[level].time / 1000) + " seconds", x + 90, y + 50, 16)
             }
 
         }
@@ -2336,9 +2340,11 @@ class DistinctionPage {
         text('collect ' + levelStats.targetBalls + ' or more balls', 1400, balls.y + 40, 50)
         text('complete in ' + levelStats.targetMoves + ' or fewer moves', 1400, moves.y + 40, 50)
         text('finish in ' + formatTime(levelStats.targetTime * 1000) + ' or less', 1400, time.y + 40, 50)
-        text('your best: ' + levelChallenges[level].balls + ' balls', 1400, balls.y + 70, 20)
-        text('your best: ' + levelChallenges[level].moves + ' moves', 1400, moves.y + 70, 20)
-        text('your best: ' + formatTime(levelChallenges[level].time), 1400, time.y + 70, 20)
+        if (levelChallenges[level]) {
+            text('your best: ' + levelChallenges[level].balls + ' balls', 1400, balls.y + 70, 20)
+            text('your best: ' + levelChallenges[level].moves + ' moves', 1400, moves.y + 70, 20)
+            text('your best: ' + formatTime(levelChallenges[level].time), 1400, time.y + 70, 20)
+        }
 
     }
 }
@@ -2591,7 +2597,7 @@ function setupLevel(level) {
     updateScreen()
 }
 
-let level = 1
+let level = 3
 
 resize()
 setupLevel(level)
