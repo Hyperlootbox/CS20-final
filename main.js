@@ -52,17 +52,17 @@ function resize() {
     canvas.height = window.innerHeight;
 }
 
-let scrollx = parseFloat(localStorage.scrollx) || 0;
-let scrolly = parseFloat(localStorage.scrolly) || 0;
+let scrollx = 0;
+let scrolly = 0;
 let screen = { left: 0, right: 0, up: 0, down: 0 }
-let zoom = parseFloat(localStorage.zoom) || 1;
+let zoom = 1;
 let scrollLimits = {
     zoomMin: 1 / 2,
     zoomMax: 2,
-    left: -1000,
-    right: 1000,
-    up: 1000,
-    down: -1000
+    left: -10000,
+    right: 10000,
+    up: 10000,
+    down: -10000
 }
 let levelStats = {
     collectedBalls: 0,
@@ -87,6 +87,21 @@ function worldToScreen(x, y) {
 }
 function screenToWorld(x, y) {
     return { x: (x + scrollx * zoom - canvas.width * zoom / 2) / zoom, y: -(y - scrolly * zoom - canvas.height * zoom / 2) / zoom };
+}
+function centerCameraOn(x, y) {
+    let center = screenToWorld(canvas.width / 2, canvas.height / 2)
+    scrollx += x - center.x
+    scrolly += y - center.y
+}
+function smoothCameraTo(sx, sy, fx, fy, st, ft, sz = zoom, fz = sz) {
+    let t = clamp((ticks - st) / (ft - st), 0, 1)
+    t = t * t * t * (t * (t * 6 - 15) + 10)
+    let steepness = 4
+    let min = atan(-steepness / 2)
+    let max = atan(steepness / 2)
+    t = (atan(steepness * (t - 0.5)) - min) / (max - min)
+    zoom = sz + (fz - sz) * t
+    centerCameraOn(sx + (fx - sx) * t, sy + (fy - sy) * t)
 }
 function dist(a, b, c = 0, d = 0) {
     return norm(a, b, c, d) ** 0.5
@@ -186,6 +201,56 @@ function formatTime(ms) {
 
     return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
+function scene() {
+    updateScreen()
+    if (level == 1 && ticks <= 7200) {
+        smoothCameraTo(50, 400, 50, 150, 900, 6300, 2)
+        return true
+    }
+    if (level == 2 && ticks < 14000) {
+        if (ticks < 6300) {
+            smoothCameraTo(1000, -250, 1200, 100, 900, 6300, 2)
+        } else {
+            smoothCameraTo(1200, 100, 100, 50, 7200, 13000, 2, 1.5)
+        }
+        return true
+    }
+    if (level == 3 && ticks < 16000) {
+        if (ticks < 6300) {
+            smoothCameraTo(0, 0, 0, -500, 900, 6300, 2)
+        } else if (ticks < 11000) {
+            smoothCameraTo(0, -500, 0, 400, 7200, 11000, 2)
+        } else {
+            smoothCameraTo(0, 400, 0, 0, 11000, 16000, 2, 1.5)
+        }
+        return true
+    }
+    if (level == 4 && ticks < 6300) {
+        smoothCameraTo(127, 500, 127, 100, 900, 6300, 2, 1.5)
+        return true
+    }
+    if (level == 5 && ticks < 6300) {
+        smoothCameraTo(0, 700, 0, 0, 900, 6300, 2, 1.5)
+        return true
+    }
+    if (level == 6 && ticks < 6300) {
+        if (ticks < 3600) {
+            smoothCameraTo(0, -150, 0, -150, 0, 1, 1.2, 1.2)
+        } else {
+            smoothCameraTo(0, -150, 0, -300, 3600, 6300, 1.2, 1.5)
+        }
+        return true
+    }
+    if (level == 7 && ticks <= 14000) {
+        if (ticks<6300) {
+            smoothCameraTo(0, 100, 0, 1800, 1800, 6300, 1)
+        } else {
+            smoothCameraTo(0, 1800, 0, 100, 6300, 14000, 1)
+        }
+        return true
+    }
+    return false
+}
 
 let fpsLimit = 60
 let nextFrame = time
@@ -194,10 +259,13 @@ let dt = 60 / ticksPerSecond
 let simulationSpeed = 0
 let ticksThisSecond = 0
 let ticks = 0
+let isScene = false
 
 function gameAnimationFrame() {
     continueBtn.tick()
-    for (let i = 0; i < ticksPerSecond / fpsLimit; i++) {
+    isScene = scene()
+    let m = isScene && mouse[0] ? 5 : 1
+    for (let i = 0; i < ticksPerSecond / fpsLimit * m; i++) {
         ticks++
         ticksThisSecond++
         iterRun(surfaces, 'tick')
@@ -221,17 +289,32 @@ function gameAnimationFrame() {
     iterRun(floatingTexts, 'draw')
     continueBtn.draw()
     menuBtn.tick()
-    menuBtn.draw()
-    resetTransform()
-    save()
-    textAlign = 'right'
-    text(floor(simulationSpeed * 100) + "%", canvas.width, canvas.height - 17, 30)
-    textAlign = 'left'
-    text("Collected: " + levelStats.collectedBalls + "/" + levelStats.minBalls, 0, canvas.height - 17, 45)
-    restore()
+    !isScene && menuBtn.draw()
+    sceneCovers.draw(isScene)
+    if (!isScene) {
+        resetTransform()
+        save()
+        textAlign = 'right'
+        text(floor(simulationSpeed * 100) + "%", canvas.width, canvas.height - 17, 30)
+        textAlign = 'left'
+        text("Collected: " + levelStats.collectedBalls + "/" + levelStats.minBalls, 0, canvas.height - 17, 45)
+        restore()
+    }
     if (gameState == 'completed' && completeScreen) {
         completeScreen.tick()
         completeScreen && completeScreen.draw()
+    }
+}
+let sceneCovers = {
+    height: 0, draw(on) {
+        save()
+        let target = on ? 50 : 0
+        this.height += (target - this.height) / 10
+        if (on) this.height = target
+        fillStyle = '#000'
+        fillRect(0, 0, canvas.width, this.height)
+        fillRect(0, canvas.height - this.height, canvas.width, this.height)
+        restore()
     }
 }
 
@@ -248,7 +331,7 @@ function animationFrame() { // raf
         updateScreen()
     }
     while (nextFrame < time) nextFrame += 1000 / fpsLimit
-    mouse.tick()
+    !isScene && mouse.tick()
     if (gameState == 'active' || gameState == 'completed') {
         gameAnimationFrame()
     }
@@ -256,7 +339,7 @@ function animationFrame() { // raf
         distinctionPage.tick()
         distinctionPage.draw()
     }
-    mouse.draw()
+    !isScene && mouse.draw()
     mouse.updateLast()
     if (time < nextFrame) {
         setTimeout(animationFrame, nextFrame - time)
@@ -277,7 +360,7 @@ let ballStats = {
     'black': { size: 16, mass: 10, maxConnectionLen: 150, maxConnections: 2, minConnections: 2, detachable: false, connectionStrength: 2.5, connectionDamp: 1.5 },
     'white': { size: 17, mass: 12, maxConnectionLen: 150, maxConnections: 4, minConnections: 2, detachable: false, connectionStrength: 3.5, connectionDamp: 2.5 },
     'green': { size: 16, mass: 8, maxConnectionLen: 150, maxConnections: 3, minConnections: 2, detachable: true, connectionStrength: 2.5, connectionDamp: 1.5 },
-    'steel': { size: 16, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 1, detachable: false, connectionStrength: 50, connectionDamp: 50 },
+    'steel': { size: 16, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 2, detachable: false, connectionStrength: 50, connectionDamp: 50 },
     'pin': { size: 10, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 1, detachable: false, connectionStrength: 50, connectionDamp: 50 },
 }
 class Ball {
@@ -548,18 +631,18 @@ class Ball {
 
                         if (connections.length) this.surfaceStick = other
                         onGround = true
-
+                        if (other.id == 'transparent') connections.forEach(k => k.remove())
                     }
 
                     if (other instanceof Ball && !this.awake && other.connections.length && other.awake && norm(x, y, other.x, other.y) < sq(awakeRadius) && random() < 0.001) {
                         this.awake = true
                         floatingText('!', x + randint(-40, 20), y + randint(15, 25), 30, 2)
-                        force.x += 120 * (other.x - x) / mass
-                        force.y += 20000 / mass
+                        force.x += 1.2 * (other.x - x) * mass
+                        force.y += 200 * mass
                     }
                     if (other instanceof Ball && !structureMove.active && !connections.length && this.awake && this.onGround > 10 && other.connections.length && norm(x, y, other.x, other.y) < sq(awakeRadius) && random() < 0.001) {
-                        force.x += 120 * (other.x - x) / mass
-                        force.y += 20000 / mass
+                        force.x += 1.2 * (other.x - x) * mass
+                        force.y += 200 * mass
                         this.onGround = 0
                     }
 
@@ -808,7 +891,11 @@ class Ball {
             if (d < 1) {
                 this.remove()
                 levelStats.collectedBalls++
-                pipeText = floatingText(levelStats.collectedBalls, pipe.x, pipe.y, 40, 3)
+                if (levelStats.collectedBalls == levelInfo[level][1]) {
+                    pipeText = floatingText('OCD!', pipe.x, pipe.y, 60, 3)
+                } else {
+                    pipeText = floatingText(levelStats.collectedBalls, pipe.x, pipe.y, 40, 3)
+                }
             }
         } else if (structureMove.active) {
             vx = 0
@@ -1121,6 +1208,10 @@ class Surface {
         this.y1 = y1;
         this.x2 = x2;
         this.y2 = y2;
+        this.basex1 = x1;
+        this.basey1 = y1;
+        this.basex2 = x2;
+        this.basey2 = y2;
         this.friction = 0.5
         this.sticky = 0
         if (id == 'sticky1') {
@@ -1183,26 +1274,16 @@ class Surface {
         bound.up = floor(max(y1, y2) / boundingBoxSize) + 1
         return bound
     }
-    tick() {
-        let { x1, y1, x2, y2, id } = this
+    tick() { // surface.tick
+        let { x1, y1, x2, y2, basex1, basey1, basex2, basey2, id } = this
 
-        let spinval = ticks / ticksPerSecond * 2
-        if (id == 'spin') {
-            x1 = cos(spinval) * 200
-            x2 = -cos(spinval) * 200
-            y1 = 200 + sin(spinval) * 200
-            y2 = 200 - sin(spinval) * 200
+        if (id == 'rotate') {
+            let spinval = ticks / ticksPerSecond * 0.2
+            x1 = basex1 * cos(spinval) - basey1 * sin(spinval)
+            y1 = basex1 * sin(spinval) + basey1 * cos(spinval)
+            x2 = basex2 * cos(spinval) - basey2 * sin(spinval)
+            y2 = basex2 * sin(spinval) + basey2 * cos(spinval)
         }
-        if (id == 'rspin') {
-            x1 = -cos(spinval) * 200 + 400
-            x2 = cos(spinval) * 200 + 400
-            y1 = 200 + sin(spinval) * 200
-            y2 = 200 - sin(spinval) * 200
-        }
-        if (id.includes('rotate')) {
-            
-        }
-
         this.vx1 = (x1 - this.x1) / dt
         this.vy1 = (y1 - this.y1) / dt
         this.vx2 = (x2 - this.x2) / dt
@@ -1338,16 +1419,6 @@ class Wall {
         let { surfaces, id } = this
         save()
         scroll()
-        if (['basic', 'sticky1', 'sticky2'].includes(id)) {
-            beginPath()
-            moveTo(surfaces[0].x1, surfaces[0].y1)
-            for (let surface of surfaces) {
-                lineTo(surface.x2, surface.y2)
-            }
-            closePath()
-            fillStyle = '#000'
-            fill()
-        }
         if (id == 'transparent') {
             beginPath()
             moveTo(surfaces[0].x1, surfaces[0].y1)
@@ -1358,6 +1429,15 @@ class Wall {
             lineWidth = 10
             strokeStyle = 'rgba(200,200,200,0.2)'
             stroke()
+        } else {
+            beginPath()
+            moveTo(surfaces[0].x1, surfaces[0].y1)
+            for (let surface of surfaces) {
+                lineTo(surface.x2, surface.y2)
+            }
+            closePath()
+            fillStyle = '#000'
+            fill()
         }
 
         restore()
@@ -1577,6 +1657,7 @@ class Mouse {
             while (draggedBall.connections.length) {
                 draggedBall.connections[0].remove()
             }
+            levelStats.moves++
         }
         if (mouse[0] && !mouse.last[0] && !draggedBall) {
             this.draggedBall = closestBall
@@ -2134,6 +2215,7 @@ class FloatText {
             this.y += 1
         }
         if (type == 3) {
+            if (this.t == 'OCD!') pipeText = this
             if (pipeText != this && !this.watch) this.watch = pipeText
             if (this.watch && endLife > time + 300 && this.watch.endLife < time + 1500) {
                 this.endLife = time + 300
@@ -2170,10 +2252,10 @@ class FloatText {
             if (p > 0) {
                 let i = min(1, (2000 - p) / 500)
                 let angle = pi / 6 + 2 * pi * i
-                let radius = 2 * (p < 300 ? p / 300 * size : i * size)
+                let radius = 2 * (p < 300 ? p / 300 * 40 : i * 40)
                 translate(x + radius * cos(angle), -y - radius * sin(angle))
                 rotate(2 * (1 - i))
-                text(t, 0, 0, radius / 2)
+                text(t, 0, 0, radius / 2 * size / 40)
             }
         }
         restore()
@@ -2244,6 +2326,15 @@ let levelInfo = {
     3: [25, 52, 10, 24],
     4: [20, 49, 15, 33],
     5: [8, 29, 15, 33],
+    6: [24, 53, 2, 24],
+    7: [44, 72, 48, 72],
+    8: [0, 0, 0, 0],
+    9: [0, 0, 0, 0],
+    10: [0, 0, 0, 0],
+    11: [0, 0, 0, 0],
+    12: [0, 0, 0, 0],
+    13: [0, 0, 0, 0],
+    14: [0, 0, 0, 0],
 }
 let levelChallenges = (_ => {
     try {
@@ -2261,16 +2352,22 @@ function setupLevel(level) {
     triangles = []
     walls = []
     surfaces = []
+    saws = []
     pipe = null
+    pipeText = null
+    floatingTexts = []
     seenId = 0
+    isScene = false
+    sceneCovers.height = 0
     completeScreen = null
     distinctionPage = new DistinctionPage()
     ticks = 0
     ticksThisSecond = 0
     simulationSpeed = 0
     nextFrame = time
-    //mouse = new Mouse()
+    mouse = new Mouse()
     continueBtn = new Button('continue')
+    menuBtn = new Button('menu')
     gameState = 'active'
     let stats = levelInfo[level] ?? [0, 0, 0, 0]
     levelStats = {
@@ -2305,9 +2402,6 @@ function setupLevel(level) {
             up: 900,
             down: -400
         }
-        scrollx = 500
-        scrolly = -50
-        zoom = 2
     }
     if (level == 2) {
         createSquare(50, 20)
@@ -2328,15 +2422,12 @@ function setupLevel(level) {
         pipe = new Pipe('basic', 1200, 100, 1200, 400, 1350, 400, 1350, 2000)
         scrollLimits = {
             zoomMin: 1,
-            zoomMax: 1.5,
+            zoomMax: 2,
             left: -500,
             right: 1500,
             up: 700,
             down: -700
         }
-        scrollx = 500
-        scrolly = -50
-        zoom = 1.5
     }
     if (level == 3) {
         wall('sticky2', -100, 0, -250, 0, -250, -50, -100, -50)
@@ -2373,9 +2464,6 @@ function setupLevel(level) {
             up: 600,
             down: -700
         }
-        scrollx = 300
-        scrolly = -50
-        zoom = 1.5
     }
     if (level == 4) {
         createSquare(20, 20)
@@ -2399,9 +2487,6 @@ function setupLevel(level) {
             up: 800,
             down: -300
         }
-        scrollx = 300
-        scrolly = -50
-        zoom = 1.5
     }
     if (level == 5) {
         let c = ball(0, 0, 'pin')
@@ -2431,20 +2516,53 @@ function setupLevel(level) {
             up: 1000,
             down: -800
         }
-        scrollx = 350
-        scrolly = -140
-        zoom = 1.5
     }
     if (level == 6) {
-        for(let i  = 0;i<8;i++) {
-            surfaces.push(new Surface(0,0,0,0,'rotate'+i))
+        let s = []
+        for (let i = 0; i <= pi / 4 * 8; i += pi / 4) {
+            s.push(600 * cos(i), 600 * sin(i))
+        }
+        for (let i = pi / 4 * 8; i >= 0; i -= pi / 4) {
+            s.push(1000 * cos(i), 1000 * sin(i))
+        }
+        wall('rotate', ...s)
+        createSquare(0, -200, 'green')
+        for (let i = 0; i < 50; i++) {
+            ball(randint(-200, 200), randint(-200, 200), 'green')
+        }
+        pipe = new Pipe('basic', 0, 0, 0, 200, 1000, 200)
+        scrollLimits = {
+            zoomMin: 1.5,
+            zoomMax: 2,
+            left: -650,
+            right: 650,
+            up: 650,
+            down: -650
+        }
+    }
+    if (level == 7) {
+        createSquare(-50, 20, 'white')
+        wall('sticky2', -1000, 0, 1000, 0, 1000, -500, -1000, -500)
+        surfaces.push(new Surface(-1000, 0, -1000, 3000, 'transparent'))
+        surfaces.push(new Surface(1000, 0, 1000, 3000, 'transparent'))
+        pipe = new Pipe('basic', 0, 1800, 0, 3000)
+        for (let i = 0; i < 120; i++) {
+            ball(randint(-600, 600), randint(20, 2200), 'white')
+        }
+        scrollLimits = {
+            zoomMin: 1,
+            zoomMax: 2,
+            left: -1000,
+            right: 1000,
+            up: 2200,
+            down: -500
         }
     }
     clampScroll()
     updateScreen()
 }
 
-let level = 6
+let level = 7
 
 resize()
 setupLevel(level)
@@ -2464,11 +2582,6 @@ addEventListener('mouseup', e => {
 })
 addEventListener('contextmenu', e => {
     e.preventDefault();
-})
-addEventListener('beforeunload', e => {
-    localStorage.zoom = zoom
-    localStorage.scrollx = scrollx
-    localStorage.scrolly = scrolly
 })
 addEventListener('keydown', e => {
     e.key == '`' && createSquare(mouse.x, mouse.y)
