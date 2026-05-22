@@ -242,7 +242,7 @@ function scene() {
         return true
     }
     if (level == 7 && ticks <= 14000) {
-        if (ticks<6300) {
+        if (ticks < 6300) {
             smoothCameraTo(0, 100, 0, 1800, 1800, 6300, 1)
         } else {
             smoothCameraTo(0, 1800, 0, 100, 6300, 14000, 1)
@@ -362,6 +362,7 @@ let ballStats = {
     'green': { size: 16, mass: 8, maxConnectionLen: 150, maxConnections: 3, minConnections: 2, detachable: true, connectionStrength: 2.5, connectionDamp: 1.5 },
     'steel': { size: 16, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 2, detachable: false, connectionStrength: 50, connectionDamp: 50 },
     'pin': { size: 10, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 1, detachable: false, connectionStrength: 50, connectionDamp: 50 },
+    'bloon': { size: 32, mass: 8, maxConnectionLen: 160, maxConnections: 1, minConnections: 1, detachable: true, connectionStrength: 2.5, connectionDamp: 1.5 },
 }
 class Ball {
     constructor(x, y, type = 'black', awake = true) {
@@ -498,6 +499,7 @@ class Ball {
         }
 
         for (let connection of connections) {
+            if (connection.type == 'bloon') continue
             let { a, b } = connection
             let closest = pointProjSegment(x, y, a.x, a.y, b.x, b.y)
             if (norm(x, y, closest.x, closest.y) <= sq(triangleRange)) {
@@ -545,8 +547,13 @@ class Ball {
             force.x = (mouse.x - x) / mag * followK - vx * followC
             force.y = (mouse.y - y) / mag * followK - vy * followC
         } else if (!structureMove.active) {
-            force.x += gravity.x * mass
-            force.y += gravity.y * mass
+            if (type == 'bloon' && connections.length) {
+                force.x -= gravity.x * 40
+                force.y -= gravity.y * 40
+            } else {
+                force.x += gravity.x * mass
+                force.y += gravity.y * mass
+            }
         }
         let onGround = false
         if (structureMove.active) return
@@ -562,7 +569,7 @@ class Ball {
                     if (other == this || other.seen == seenId) continue
                     other.seen = seenId
 
-                    if (!this.connections.length && other instanceof Connection && awake) {
+                    if (!this.connections.length && other instanceof Connection && awake && other.type != 'bloon') {
                         let { a, b } = other
                         let { x: x1, y: y1 } = a
                         let { x: x2, y: y2 } = b
@@ -661,7 +668,7 @@ class Ball {
                         let rvx = vx - other.vx
                         let rvy = vy - other.vy
                         let rv = rvx * nx + rvy * ny
-                        let k = 3; // ball stiffness
+                        let k = other.type=='bloon'||type=='bloon'?0.1:3; // ball stiffness
                         let fnet = max(0, inside * k - 1 * (mass * k) ** 0.5 * rv)
                         force.x += fnet * nx
                         force.y += fnet * ny
@@ -703,7 +710,7 @@ class Ball {
         }
 
         // pipe sucking
-        if (pipe) {
+        if (pipe && type != 'bloon') {
             let dx = pipe.x - x
             let dy = pipe.y - y
             let d = dist(dx, dy)
@@ -759,8 +766,9 @@ class Ball {
         let rvx = vx - wind.vx
         let rvy = vy - wind.vy
         let rvmag = dist(rvx, rvy)
-        force.x -= wind.drag * rvmag * rvx
-        force.y -= wind.drag * rvmag * rvy
+        let m = type == 'bloon' ? 40 : 1
+        force.x -= wind.drag * rvmag * rvx * m
+        force.y -= wind.drag * rvmag * rvy * m
 
 
         this.force = force
@@ -891,7 +899,7 @@ class Ball {
             if (d < 1) {
                 this.remove()
                 levelStats.collectedBalls++
-                if (levelStats.collectedBalls == levelInfo[level][1]) {
+                if (levelStats.collectedBalls == levelStats.minBalls) {
                     pipeText = floatingText('OCD!', pipe.x, pipe.y, 60, 3)
                 } else {
                     pipeText = floatingText(levelStats.collectedBalls, pipe.x, pipe.y, 40, 3)
@@ -906,10 +914,10 @@ class Ball {
                 let prev = structureMove.previousNode
                 let next = structureMove.currentConnection.other(prev)
                 let t = structureMove.t
-                t += (prev.suckPath ? 0.1 : 0.05) / dist(prev.x, prev.y, next.x, next.y)
+                t += (prev.suckPath && type != 'bloon' ? 0.1 : 0.05) / dist(prev.x, prev.y, next.x, next.y)
                 if (t > 1) {
                     structureMove.previousNode = next
-                    if (next.suckPath) {
+                    if (next.suckPath && type != 'bloon') {
                         if (next.suckPath == 'pipe') {
                             this.pipeSucked = true
                             return
@@ -921,6 +929,11 @@ class Ball {
                             let b2 = c2.other(next)
                             return norm(b1.x, b1.y, mouse.x, mouse.y) - norm(b2.x, b2.y, mouse.x, mouse.y)
                         })
+                        for (let i = possible.length - 1; i >= 0; i--) {
+                            if (possible[i].type == 'bloon') {
+                                possible.splice(i, 1)
+                            }
+                        }
                         structureMove.currentConnection = possible[parseInt(sqrt(randfloat(sq(possible.length))))]
                     }
                     t--
@@ -1004,6 +1017,18 @@ class Ball {
             lineTo(-size / 2, 0)
             strokeStyle = '#111'
             lineWidth = size / 5
+            stroke()
+        }
+        if (type == 'bloon') {
+            globalAlpha = 0.7
+            beginPath()
+            arc(0, 0, size * 0.8, 0, 2 * pi);
+            fillStyle = '#ff4242'
+            fill()
+            beginPath()
+            arc(0, 0, size * 0.9, 0, 2 * pi);
+            lineWidth = size * 0.2
+            strokeStyle = '#ff1c1c'
             stroke()
         }
         restore()
@@ -1171,6 +1196,10 @@ class Connection {
         }
         if (type == 'steel') {
             strokeStyle = '#485b7a'
+        }
+        if (type == 'bloon') {
+            strokeStyle = '#b0b0b0'
+            globalAlpha = 0.5
         }
         beginPath()
         moveTo(a.x, a.y)
@@ -1463,13 +1492,13 @@ class Pipe {
         this.active = false
         if (gameState !== 'active') return
         for (let ball of balls) {
-            if (ball.connections.length && norm(ball.x, ball.y, x, y) < sq(range)) {
+            if (ball.connections.length && norm(ball.x, ball.y, x, y) < sq(range) && ball.type != 'bloon') {
                 this.active = true
             }
         }
         if (this.previousActive && !this.active) {
             for (let ball of balls) {
-                if (norm(ball.x, ball.y, x, y) < sq(range) && mouse.draggedBall != ball) {
+                if (norm(ball.x, ball.y, x, y) < sq(range) && mouse.draggedBall != ball && ball.type != 'bloon') {
                     ball.pipeSucked = true
                 }
             }
@@ -1570,7 +1599,7 @@ class Mouse {
                 let cell = boundingBoxes[j]?.[i]
                 if (!cell) continue
                 for (let ball of cell) {
-                    if (ball.seen == seenId || !(ball instanceof Ball) || ball.connections.length == 0) continue
+                    if (ball.seen == seenId || !(ball instanceof Ball) || !ball.connections.length || ball.type == 'bloon') continue
                     ball.seen = seenId
                     closestBalls.push(ball)
                 }
@@ -1657,7 +1686,7 @@ class Mouse {
             while (draggedBall.connections.length) {
                 draggedBall.connections[0].remove()
             }
-            levelStats.moves++
+            if (levelStats.collectedBalls<levelStats.minBalls) levelStats.moves++
         }
         if (mouse[0] && !mouse.last[0] && !draggedBall) {
             this.draggedBall = closestBall
@@ -1683,7 +1712,7 @@ class Mouse {
                 if (norm(draggedBall.vx, draggedBall.vy) < 50) {
                     draggedBall.vx = 0
                     draggedBall.vy = 0
-                    if (connections.length) levelStats.moves++
+                    if (connections.length && levelStats.collectedBalls<levelStats.minBalls) levelStats.moves++
                     if (connections.lineConnection) {
                         connect(connections[0], connections[1], draggedBall)
                         draggedBall.remove()
@@ -2562,7 +2591,7 @@ function setupLevel(level) {
     updateScreen()
 }
 
-let level = 7
+let level = 1
 
 resize()
 setupLevel(level)
