@@ -201,6 +201,19 @@ function formatTime(ms) {
 
     return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
+
+function any(arr, func) {
+    for (let i of arr) {
+        if (func(i)) return true
+    }
+    return false
+}
+function all(arr, func) {
+    for (let i of arr) {
+        if (!func(i)) return false
+    }
+    return true
+}
 function scene() {
     updateScreen()
     if (level == 1 && ticks <= 7200) {
@@ -247,6 +260,14 @@ function scene() {
         } else {
             smoothCameraTo(0, 1800, 0, 100, 6300, 14000, 1)
         }
+        return true
+    }
+    if (level == 8 && ticks < 6300) {
+        smoothCameraTo(800, 50, 400, 50, 0, 6300, 0.7, 1)
+        return true
+    }
+    if (level == 9 && ticks < 6300) {
+        smoothCameraTo(0, 1000, 0, 100, 0, 6300, 2, 2)
         return true
     }
     return false
@@ -907,7 +928,7 @@ class Ball {
             if (d < 1) {
                 this.remove()
                 levelStats.collectedBalls++
-                if (levelStats.collectedBalls == levelStats.minBalls) {
+                if (levelStats.collectedBalls == levelStats.targetBalls) {
                     pipeText = floatingText('OCD!', pipe.x, pipe.y, 60, 3)
                 } else {
                     pipeText = floatingText(levelStats.collectedBalls, pipe.x, pipe.y, 40, 3)
@@ -923,7 +944,7 @@ class Ball {
                 let next = structureMove.currentConnection.other(prev)
                 let t = structureMove.t
                 let speed = 0.05
-                if (prev.suckPath && type != 'bloon') t *= 2
+                if (prev.suckPath && type != 'bloon') speed *= 2
                 if (type == 'bloon') speed *= 0.75
                 t += speed / dist(prev.x, prev.y, next.x, next.y)
                 if (t > 1) {
@@ -1253,13 +1274,10 @@ class Surface {
         this.basex2 = x2;
         this.basey2 = y2;
         this.friction = 0.5
+        if (id == 'friction') this.friction = 1
         this.sticky = 0
-        if (id == 'sticky1') {
-            this.sticky = 30
-        }
-        if (id == 'sticky2') {
-            this.sticky = 90
-        }
+        if (id == 'sticky1') this.sticky = 30
+        if (id == 'sticky2') this.sticky = 90
         this.id = id
         this.vx1 = 0;
         this.vy1 = 0;
@@ -1581,14 +1599,13 @@ class Pipe {
                     let s = 1.05 + 0.05 * sin(ticks / 100)
                     scale(s, s)
                 }
-                beginPath()
                 moveTo(px * 25, py * 25)
                 lineTo(-px * 25, -py * 25)
                 lineTo(-px * b + nx * 30, -py * b + ny * 30)
                 lineTo(px * b + nx * 30, py * b + ny * 30)
-                closePath()
                 fillStyle = '#333'
                 fill()
+                beginPath()
                 restore()
             }
             moveTo(next[0] + nx * b, next[1] + ny * b)
@@ -1715,14 +1732,15 @@ class Mouse {
                 for (let ball of cell) {
                     if (ball.seen == seenId || !(ball instanceof Ball) || !ball.detachable && ball.connections.length || !ball.awake) continue
                     ball.seen = seenId
-                    let d = norm(x, y, ball.x, ball.y)
-                    if (d < min(closest, sq(grabRange))) {
+                    let d = dist(x, y, ball.x, ball.y) - sqrt(ball.size)
+                    if (d < min(closest, grabRange)) {
                         closest = d
                         closestBall = ball
                     }
                 }
             }
         }
+        if (any([menuBtn, continueBtn].concat(Object.values(menuBtn.buttons || {})), k => k.hovered)) closestBall = null
         if (draggedBall && draggedBall.connections.length && norm(draggedBall.x, draggedBall.y, x, y) > sq(50 / zoom)) {
             while (draggedBall.connections.length) {
                 draggedBall.connections[0].remove()
@@ -2352,9 +2370,11 @@ class DistinctionPage {
         balls.x = 300
         moves.x = 300
         time.x = 300
-        balls.y = 300
-        moves.y = 500
-        time.y = 700
+        let m = 80
+        let s = canvas.height - m
+        balls.y = s / 4 + m
+        moves.y = s / 2 + m
+        time.y = s / 4 * 3 + m
         balls.tick()
         moves.tick()
         time.tick()
@@ -2400,8 +2420,8 @@ let levelInfo = {
     5: [8, 29, 15, 33],
     6: [24, 53, 2, 24],
     7: [44, 72, 48, 72],
-    8: [0, 0, 0, 0],
-    9: [0, 0, 0, 0],
+    8: [6, 24, 28, 56],
+    9: [3, 13, 20, 36],
     10: [0, 0, 0, 0],
     11: [0, 0, 0, 0],
     12: [0, 0, 0, 0],
@@ -2637,21 +2657,41 @@ function setupLevel(level) {
         wall('basic', 120, 0, -50, 0, -300, 130, -1000, 130, -1000, -500)
         wall('spikeccw', -1000, -600, 2000, -600, 2000, -400, -1000, -400)
         wall('spikeccw', -1000, 500, 2000, 500, 2000, 700, -1000, 700)
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < 45; i++) {
             ball(randint(0, 100), randint(16, 116))
         }
-        for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < 8; i++) {
             ball(randint(0, 100), randint(16, 116), 'bloon')
         }
-        let a = ball(116, 250, 'bloon')
-        connect(a, balls[3])
-        pipe = new Pipe('basic', 1600, 50, 2000, 50)
+        for (let i = 0; i < 1; i++) {
+            let a = ball(116, 250, 'bloon')
+            connect(a, balls[3])
+        }
+        for (let i = 0; i < 4; i++) {
+            let a = ball(-20 + 20 * i, 250, 'bloon')
+            connect(a, balls[1])
+        }
+        pipe = new Pipe('basic', 1600, 50, 2300, 50)
+        scrollLimits = {
+            zoomMin: 1,
+            zoomMax: 2,
+            left: -500,
+            right: 2000,
+            up: 600,
+            down: -500
+        }
+    }
+    if (level == 9) {
+        createSquare(-50, 20, 'green')
+        wall('friction', -1000, 0, -600, 0, -350, 2000, -100, 0, 100, 0, 350, 2000, 600, 0, 1000, 0, 1000, -500, -1000, -500)
+        for (let i = 0; i < 10; i++) ball(randint(-200, 200), randint(800, 3000), 'green')
+        pipe = new Pipe('basic', 0, 1000, 0, 2000)
     }
     clampScroll()
     updateScreen()
 }
 
-let level = 8
+let level = 9
 
 resize()
 setupLevel(level)
