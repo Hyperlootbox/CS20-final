@@ -576,7 +576,7 @@ class Ball {
                         let { x: sx, y: sy, t: t } = pointProjSegment(x, y, x1, y1, x2, y2)
 
                         let d = dist(x, y, sx, sy)
-                        if (size - d <= 0) continue
+                        if (16 - d <= 0) continue
                         //conservation of momentum
                         a.vx = (t * mass * vx + a.mass * a.vx - t * mass * (a.vx + b.vx) / 2) / a.mass
                         a.vy = (t * mass * vy + a.mass * a.vy - t * mass * (a.vy + b.vy) / 2) / a.mass
@@ -601,6 +601,10 @@ class Ball {
                         let dx = x - sx
                         let dy = y - sy
                         if (sq(size) - norm(x, y, sx, sy) <= 0) continue
+                        if (other.id.includes('spike') && mouse.draggedBall != this && !['steel'].includes(this.type)) {
+                            this.deathTimer = time
+                            return
+                        }
                         let surfacevx = vx1 * (1 - t) + vx2 * t
                         let surfacevy = vy1 * (1 - t) + vy2 * t
                         let distance = dist(x, y, sx, sy)
@@ -918,7 +922,10 @@ class Ball {
                 let prev = structureMove.previousNode
                 let next = structureMove.currentConnection.other(prev)
                 let t = structureMove.t
-                t += (prev.suckPath && type != 'bloon' ? 0.1 : 0.05) / dist(prev.x, prev.y, next.x, next.y)
+                let speed = 0.05
+                if (prev.suckPath && type != 'bloon') t *= 2
+                if (type == 'bloon') speed *= 0.75
+                t += speed / dist(prev.x, prev.y, next.x, next.y)
                 if (t > 1) {
                     structureMove.previousNode = next
                     if (next.suckPath && type != 'bloon') {
@@ -1462,6 +1469,34 @@ class Wall {
             lineWidth = 10
             strokeStyle = 'rgba(200,200,200,0.2)'
             stroke()
+        } else if (id.includes('spike')) {
+            beginPath()
+            moveTo(surfaces[0].x1, surfaces[0].y1)
+            for (let surface of surfaces) {
+                let dx = surface.x2 - surface.x1
+                let dy = surface.y2 - surface.y1
+                let d = dist(dx, dy)
+                let tanx = dx / d
+                let tany = dy / d
+                let normx = -tany
+                let normy = tanx
+                if (id == 'spikeccw') {
+                    normx *= -1
+                    normy *= -1
+                }
+                let h = 20
+                let w = 10
+                let amount = floor(d / w)
+                w = d / amount
+                for (let i = 0; i < amount; i++) {
+                    lineTo(w * tanx * i + surface.x1, w * tany * i + surface.y1)
+                    lineTo(w * tanx * (i + 1 / 2) + surface.x1 + normx * h, w * tany * (i + 1 / 2) + surface.y1 + normy * h)
+                }
+                lineTo(surface.x2, surface.y2)
+            }
+            closePath()
+            fillStyle = '#000'
+            fill()
         } else {
             beginPath()
             moveTo(surfaces[0].x1, surfaces[0].y1)
@@ -1531,6 +1566,8 @@ class Pipe {
             let dy = next[1] - cur[1]
             let nx = dx / dist(dx, dy)
             let ny = dy / dist(dx, dy)
+            let px = -ny
+            let py = nx
             beginPath()
             let e = 34
             let b = lineWidth / 2
@@ -1544,14 +1581,14 @@ class Pipe {
                     let s = 1.05 + 0.05 * sin(ticks / 100)
                     scale(s, s)
                 }
-                moveTo(ny * 25, 0)
-                lineTo(-ny * 25, 0)
-                lineTo(-ny * b, ny * 30)
-                lineTo(ny * b, ny * 30)
-                lineTo(ny * 25, 0)
+                beginPath()
+                moveTo(px * 25, py * 25)
+                lineTo(-px * 25, -py * 25)
+                lineTo(-px * b + nx * 30, -py * b + ny * 30)
+                lineTo(px * b + nx * 30, py * b + ny * 30)
+                closePath()
                 fillStyle = '#333'
                 fill()
-                beginPath()
                 restore()
             }
             moveTo(next[0] + nx * b, next[1] + ny * b)
@@ -2593,11 +2630,28 @@ function setupLevel(level) {
             down: -500
         }
     }
+    if (level == 8) {
+        createSquare(0, 16)
+        balls[0].type = 'pin'
+        balls[1].type = 'pin'
+        wall('basic', 120, 0, -50, 0, -300, 130, -1000, 130, -1000, -500)
+        wall('spikeccw', -1000, -600, 2000, -600, 2000, -400, -1000, -400)
+        wall('spikeccw', -1000, 500, 2000, 500, 2000, 700, -1000, 700)
+        for (let i = 0; i < 30; i++) {
+            ball(randint(0, 100), randint(16, 116))
+        }
+        for (let i = 0; i < 9; i++) {
+            ball(randint(0, 100), randint(16, 116), 'bloon')
+        }
+        let a = ball(116, 250, 'bloon')
+        connect(a, balls[3])
+        pipe = new Pipe('basic', 1600, 50, 2000, 50)
+    }
     clampScroll()
     updateScreen()
 }
 
-let level = 3
+let level = 8
 
 resize()
 setupLevel(level)
