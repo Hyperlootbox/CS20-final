@@ -52,17 +52,17 @@ function resize() {
     canvas.height = window.innerHeight;
 }
 
-let scrollx = parseFloat(localStorage.scrollx) || 0;
-let scrolly = parseFloat(localStorage.scrolly) || 0;
+let scrollx = 0;
+let scrolly = 0;
 let screen = { left: 0, right: 0, up: 0, down: 0 }
-let zoom = parseFloat(localStorage.zoom) || 1;
+let zoom = 1;
 let scrollLimits = {
     zoomMin: 1 / 2,
     zoomMax: 2,
-    left: -1000,
-    right: 1000,
-    up: 1000,
-    down: -1000
+    left: -10000,
+    right: 10000,
+    up: 10000,
+    down: -10000
 }
 let levelStats = {
     collectedBalls: 0,
@@ -87,6 +87,21 @@ function worldToScreen(x, y) {
 }
 function screenToWorld(x, y) {
     return { x: (x + scrollx * zoom - canvas.width * zoom / 2) / zoom, y: -(y - scrolly * zoom - canvas.height * zoom / 2) / zoom };
+}
+function centerCameraOn(x, y) {
+    let center = screenToWorld(canvas.width / 2, canvas.height / 2)
+    scrollx += x - center.x
+    scrolly += y - center.y
+}
+function smoothCameraTo(sx, sy, fx, fy, st, ft, sz = zoom, fz = sz) {
+    let t = clamp((ticks - st) / (ft - st), 0, 1)
+    t = t * t * t * (t * (t * 6 - 15) + 10)
+    let steepness = 4
+    let min = atan(-steepness / 2)
+    let max = atan(steepness / 2)
+    t = (atan(steepness * (t - 0.5)) - min) / (max - min)
+    zoom = sz + (fz - sz) * t
+    centerCameraOn(sx + (fx - sx) * t, sy + (fy - sy) * t)
 }
 function dist(a, b, c = 0, d = 0) {
     return norm(a, b, c, d) ** 0.5
@@ -187,6 +202,77 @@ function formatTime(ms) {
     return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
+function any(arr, func) {
+    for (let i of arr) {
+        if (func(i)) return true
+    }
+    return false
+}
+function all(arr, func) {
+    for (let i of arr) {
+        if (!func(i)) return false
+    }
+    return true
+}
+function scene() {
+    updateScreen()
+    if (level == 1 && ticks <= 7200) {
+        smoothCameraTo(50, 400, 50, 150, 900, 6300, 2)
+        return true
+    }
+    if (level == 2 && ticks < 14000) {
+        if (ticks < 6300) {
+            smoothCameraTo(1000, -250, 1200, 100, 900, 6300, 2)
+        } else {
+            smoothCameraTo(1200, 100, 100, 50, 7200, 13000, 2, 1.5)
+        }
+        return true
+    }
+    if (level == 3 && ticks < 16000) {
+        if (ticks < 6300) {
+            smoothCameraTo(0, 0, 0, -500, 900, 6300, 2)
+        } else if (ticks < 11000) {
+            smoothCameraTo(0, -500, 0, 400, 7200, 11000, 2)
+        } else {
+            smoothCameraTo(0, 400, 0, 0, 11000, 16000, 2, 1.5)
+        }
+        return true
+    }
+    if (level == 4 && ticks < 6300) {
+        smoothCameraTo(127, 500, 127, 100, 900, 6300, 2, 1.5)
+        return true
+    }
+    if (level == 5 && ticks < 6300) {
+        smoothCameraTo(0, 700, 0, 0, 900, 6300, 2, 1.5)
+        return true
+    }
+    if (level == 6 && ticks < 6300) {
+        if (ticks < 3600) {
+            smoothCameraTo(0, -150, 0, -150, 0, 1, 1.2, 1.2)
+        } else {
+            smoothCameraTo(0, -150, 0, -300, 3600, 6300, 1.2, 1.5)
+        }
+        return true
+    }
+    if (level == 7 && ticks <= 14000) {
+        if (ticks < 6300) {
+            smoothCameraTo(0, 100, 0, 1800, 1800, 6300, 1)
+        } else {
+            smoothCameraTo(0, 1800, 0, 100, 6300, 14000, 1)
+        }
+        return true
+    }
+    if (level == 8 && ticks < 6300) {
+        smoothCameraTo(800, 50, 400, 50, 0, 6300, 0.7, 1)
+        return true
+    }
+    if (level == 9 && ticks < 6300) {
+        smoothCameraTo(0, 1000, 0, 100, 0, 6300, 2, 2)
+        return true
+    }
+    return false
+}
+
 let fpsLimit = 60
 let nextFrame = time
 let ticksPerSecond = 1800;
@@ -194,10 +280,13 @@ let dt = 60 / ticksPerSecond
 let simulationSpeed = 0
 let ticksThisSecond = 0
 let ticks = 0
+let isScene = false
 
 function gameAnimationFrame() {
     continueBtn.tick()
-    for (let i = 0; i < ticksPerSecond / fpsLimit; i++) {
+    isScene = scene()
+    let m = isScene && mouse[0] ? 5 : 1
+    for (let i = 0; i < ticksPerSecond / fpsLimit * m; i++) {
         ticks++
         ticksThisSecond++
         iterRun(surfaces, 'tick')
@@ -221,17 +310,32 @@ function gameAnimationFrame() {
     iterRun(floatingTexts, 'draw')
     continueBtn.draw()
     menuBtn.tick()
-    menuBtn.draw()
-    resetTransform()
-    save()
-    textAlign = 'right'
-    text(floor(simulationSpeed * 100) + "%", canvas.width, canvas.height - 17, 30)
-    textAlign = 'left'
-    text("Collected: " + levelStats.collectedBalls + "/" + levelStats.minBalls, 0, canvas.height - 17, 45)
-    restore()
+    !isScene && menuBtn.draw()
+    sceneCovers.draw(isScene)
+    if (!isScene) {
+        resetTransform()
+        save()
+        textAlign = 'right'
+        text(floor(simulationSpeed * 100) + "%", canvas.width, canvas.height - 17, 30)
+        textAlign = 'left'
+        text("Collected: " + levelStats.collectedBalls + "/" + levelStats.minBalls, 0, canvas.height - 17, 45)
+        restore()
+    }
     if (gameState == 'completed' && completeScreen) {
         completeScreen.tick()
         completeScreen && completeScreen.draw()
+    }
+}
+let sceneCovers = {
+    height: 0, draw(on) {
+        save()
+        let target = on ? 50 : 0
+        this.height += (target - this.height) / 10
+        if (on) this.height = target
+        fillStyle = '#000'
+        fillRect(0, 0, canvas.width, this.height)
+        fillRect(0, canvas.height - this.height, canvas.width, this.height)
+        restore()
     }
 }
 
@@ -248,7 +352,7 @@ function animationFrame() { // raf
         updateScreen()
     }
     while (nextFrame < time) nextFrame += 1000 / fpsLimit
-    mouse.tick()
+    !isScene && mouse.tick()
     if (gameState == 'active' || gameState == 'completed') {
         gameAnimationFrame()
     }
@@ -256,7 +360,7 @@ function animationFrame() { // raf
         distinctionPage.tick()
         distinctionPage.draw()
     }
-    mouse.draw()
+    !isScene && mouse.draw()
     mouse.updateLast()
     if (time < nextFrame) {
         setTimeout(animationFrame, nextFrame - time)
@@ -277,8 +381,9 @@ let ballStats = {
     'black': { size: 16, mass: 10, maxConnectionLen: 150, maxConnections: 2, minConnections: 2, detachable: false, connectionStrength: 2.5, connectionDamp: 1.5 },
     'white': { size: 17, mass: 12, maxConnectionLen: 150, maxConnections: 4, minConnections: 2, detachable: false, connectionStrength: 3.5, connectionDamp: 2.5 },
     'green': { size: 16, mass: 8, maxConnectionLen: 150, maxConnections: 3, minConnections: 2, detachable: true, connectionStrength: 2.5, connectionDamp: 1.5 },
-    'steel': { size: 16, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 1, detachable: false, connectionStrength: 50, connectionDamp: 50 },
+    'steel': { size: 16, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 2, detachable: false, connectionStrength: 50, connectionDamp: 50 },
     'pin': { size: 10, mass: 20, maxConnectionLen: 200, maxConnections: 10, minConnections: 1, detachable: false, connectionStrength: 50, connectionDamp: 50 },
+    'bloon': { size: 32, mass: 8, maxConnectionLen: 160, maxConnections: 1, minConnections: 1, detachable: true, connectionStrength: 2.5, connectionDamp: 1.5 },
 }
 class Ball {
     constructor(x, y, type = 'black', awake = true) {
@@ -415,6 +520,7 @@ class Ball {
         }
 
         for (let connection of connections) {
+            if (connection.type == 'bloon') continue
             let { a, b } = connection
             let closest = pointProjSegment(x, y, a.x, a.y, b.x, b.y)
             if (norm(x, y, closest.x, closest.y) <= sq(triangleRange)) {
@@ -462,8 +568,13 @@ class Ball {
             force.x = (mouse.x - x) / mag * followK - vx * followC
             force.y = (mouse.y - y) / mag * followK - vy * followC
         } else if (!structureMove.active) {
-            force.x += gravity.x * mass
-            force.y += gravity.y * mass
+            if (type == 'bloon' && connections.length) {
+                force.x -= gravity.x * 20
+                force.y -= gravity.y * 20
+            } else {
+                force.x += gravity.x * mass
+                force.y += gravity.y * mass
+            }
         }
         let onGround = false
         if (structureMove.active) return
@@ -479,14 +590,14 @@ class Ball {
                     if (other == this || other.seen == seenId) continue
                     other.seen = seenId
 
-                    if (!this.connections.length && other instanceof Connection && awake) {
+                    if (!this.connections.length && other instanceof Connection && awake && other.type != 'bloon') {
                         let { a, b } = other
                         let { x: x1, y: y1 } = a
                         let { x: x2, y: y2 } = b
                         let { x: sx, y: sy, t: t } = pointProjSegment(x, y, x1, y1, x2, y2)
 
                         let d = dist(x, y, sx, sy)
-                        if (size - d <= 0) continue
+                        if (16 - d <= 0) continue
                         //conservation of momentum
                         a.vx = (t * mass * vx + a.mass * a.vx - t * mass * (a.vx + b.vx) / 2) / a.mass
                         a.vy = (t * mass * vy + a.mass * a.vy - t * mass * (a.vy + b.vy) / 2) / a.mass
@@ -511,6 +622,10 @@ class Ball {
                         let dx = x - sx
                         let dy = y - sy
                         if (sq(size) - norm(x, y, sx, sy) <= 0) continue
+                        if (other.id.includes('spike') && mouse.draggedBall != this && !['steel'].includes(this.type)) {
+                            this.deathTimer = time
+                            return
+                        }
                         let surfacevx = vx1 * (1 - t) + vx2 * t
                         let surfacevy = vy1 * (1 - t) + vy2 * t
                         let distance = dist(x, y, sx, sy)
@@ -548,18 +663,18 @@ class Ball {
 
                         if (connections.length) this.surfaceStick = other
                         onGround = true
-
+                        if (other.id == 'transparent') connections.forEach(k => k.remove())
                     }
 
                     if (other instanceof Ball && !this.awake && other.connections.length && other.awake && norm(x, y, other.x, other.y) < sq(awakeRadius) && random() < 0.001) {
                         this.awake = true
                         floatingText('!', x + randint(-40, 20), y + randint(15, 25), 30, 2)
-                        force.x += 120 * (other.x - x) / mass
-                        force.y += 20000 / mass
+                        force.x += 1.2 * (other.x - x) * mass
+                        force.y += 200 * mass
                     }
                     if (other instanceof Ball && !structureMove.active && !connections.length && this.awake && this.onGround > 10 && other.connections.length && norm(x, y, other.x, other.y) < sq(awakeRadius) && random() < 0.001) {
-                        force.x += 120 * (other.x - x) / mass
-                        force.y += 20000 / mass
+                        force.x += 1.2 * (other.x - x) * mass
+                        force.y += 200 * mass
                         this.onGround = 0
                     }
 
@@ -578,7 +693,7 @@ class Ball {
                         let rvx = vx - other.vx
                         let rvy = vy - other.vy
                         let rv = rvx * nx + rvy * ny
-                        let k = 3; // ball stiffness
+                        let k = other.type == 'bloon' || type == 'bloon' ? 0.1 : 3; // ball stiffness
                         let fnet = max(0, inside * k - 1 * (mass * k) ** 0.5 * rv)
                         force.x += fnet * nx
                         force.y += fnet * ny
@@ -601,7 +716,8 @@ class Ball {
             let dy = y - other.y
             let distance = dist(x, y, other.x, other.y)
             let stretch = connection.length - distance
-            if (stretch / connection.strength > 50) {
+            if (connection.type == 'bloon' && stretch > 0) stretch = 0
+            if (abs(stretch / connection.strength) > 50) {
                 connection.remove();
                 continue
             }
@@ -615,12 +731,15 @@ class Ball {
             let rvy = vy - other.vy
             let rv = rvx * nx + rvy * ny
             let fnet = stretch * connection.strength - connection.damp * rv
+            if (connection.type == 'bloon') {
+                fnet = min(fnet, 0)
+            }
             force.x += fnet * nx
             force.y += fnet * ny
         }
 
         // pipe sucking
-        if (pipe) {
+        if (pipe && type != 'bloon') {
             let dx = pipe.x - x
             let dy = pipe.y - y
             let d = dist(dx, dy)
@@ -676,8 +795,9 @@ class Ball {
         let rvx = vx - wind.vx
         let rvy = vy - wind.vy
         let rvmag = dist(rvx, rvy)
-        force.x -= wind.drag * rvmag * rvx
-        force.y -= wind.drag * rvmag * rvy
+        let m = type == 'bloon' ? 80 : 1
+        force.x -= wind.drag * rvmag * rvx * m
+        force.y -= wind.drag * rvmag * rvy * m
 
 
         this.force = force
@@ -738,7 +858,7 @@ class Ball {
             floatingText('z', x + randint(-40, 20), y, 20, 1)
         }
 
-        if (norm(force.x, force.y) < sq(surfaceStick?.sticky || 0)) {
+        if (norm(force.x, force.y) < sq(surfaceStick?.sticky || 0) && type != 'bloon') {
             force.x = 0
             force.y = 0
             vx = 0
@@ -808,7 +928,11 @@ class Ball {
             if (d < 1) {
                 this.remove()
                 levelStats.collectedBalls++
-                pipeText = floatingText(levelStats.collectedBalls, pipe.x, pipe.y, 40, 3)
+                if (levelStats.collectedBalls == levelStats.targetBalls) {
+                    pipeText = floatingText('OCD!', pipe.x, pipe.y, 60, 3)
+                } else {
+                    pipeText = floatingText(levelStats.collectedBalls, pipe.x, pipe.y, 40, 3)
+                }
             }
         } else if (structureMove.active) {
             vx = 0
@@ -819,21 +943,29 @@ class Ball {
                 let prev = structureMove.previousNode
                 let next = structureMove.currentConnection.other(prev)
                 let t = structureMove.t
-                t += (prev.suckPath ? 0.1 : 0.05) / dist(prev.x, prev.y, next.x, next.y)
+                let speed = 0.05
+                if (prev.suckPath && type != 'bloon') speed *= 2
+                if (type == 'bloon') speed *= 0.75
+                t += speed / dist(prev.x, prev.y, next.x, next.y)
                 if (t > 1) {
                     structureMove.previousNode = next
-                    if (next.suckPath) {
+                    if (next.suckPath && type != 'bloon') {
                         if (next.suckPath == 'pipe') {
                             this.pipeSucked = true
                             return
                         }
                         structureMove.currentConnection = next.suckPath
                     } else {
-                        let possible = next.connections.sort((c2, c1) => {
+                        let possible = next.connections.slice().sort((c2, c1) => {
                             let b1 = c1.other(next)
                             let b2 = c2.other(next)
                             return norm(b1.x, b1.y, mouse.x, mouse.y) - norm(b2.x, b2.y, mouse.x, mouse.y)
                         })
+                        for (let i = possible.length - 1; i >= 0; i--) {
+                            if (possible[i].type == 'bloon') {
+                                possible.splice(i, 1)
+                            }
+                        }
                         structureMove.currentConnection = possible[parseInt(sqrt(randfloat(sq(possible.length))))]
                     }
                     t--
@@ -917,6 +1049,18 @@ class Ball {
             lineTo(-size / 2, 0)
             strokeStyle = '#111'
             lineWidth = size / 5
+            stroke()
+        }
+        if (type == 'bloon') {
+            globalAlpha = 0.7
+            beginPath()
+            arc(0, 0, size * 0.8, 0, 2 * pi);
+            fillStyle = '#ff4242'
+            fill()
+            beginPath()
+            arc(0, 0, size * 0.9, 0, 2 * pi);
+            lineWidth = size * 0.2
+            strokeStyle = '#ff1c1c'
             stroke()
         }
         restore()
@@ -1085,6 +1229,10 @@ class Connection {
         if (type == 'steel') {
             strokeStyle = '#485b7a'
         }
+        if (type == 'bloon') {
+            strokeStyle = '#b0b0b0'
+            globalAlpha = 0.5
+        }
         beginPath()
         moveTo(a.x, a.y)
         lineTo(b.x, b.y)
@@ -1121,14 +1269,15 @@ class Surface {
         this.y1 = y1;
         this.x2 = x2;
         this.y2 = y2;
+        this.basex1 = x1;
+        this.basey1 = y1;
+        this.basex2 = x2;
+        this.basey2 = y2;
         this.friction = 0.5
+        if (id == 'friction') this.friction = 1
         this.sticky = 0
-        if (id == 'sticky1') {
-            this.sticky = 30
-        }
-        if (id == 'sticky2') {
-            this.sticky = 90
-        }
+        if (id == 'sticky1') this.sticky = 30
+        if (id == 'sticky2') this.sticky = 90
         this.id = id
         this.vx1 = 0;
         this.vy1 = 0;
@@ -1183,26 +1332,16 @@ class Surface {
         bound.up = floor(max(y1, y2) / boundingBoxSize) + 1
         return bound
     }
-    tick() {
-        let { x1, y1, x2, y2, id } = this
+    tick() { // surface.tick
+        let { x1, y1, x2, y2, basex1, basey1, basex2, basey2, id } = this
 
-        let spinval = ticks / ticksPerSecond * 2
-        if (id == 'spin') {
-            x1 = cos(spinval) * 200
-            x2 = -cos(spinval) * 200
-            y1 = 200 + sin(spinval) * 200
-            y2 = 200 - sin(spinval) * 200
+        if (id == 'rotate') {
+            let spinval = ticks / ticksPerSecond * 0.2
+            x1 = basex1 * cos(spinval) - basey1 * sin(spinval)
+            y1 = basex1 * sin(spinval) + basey1 * cos(spinval)
+            x2 = basex2 * cos(spinval) - basey2 * sin(spinval)
+            y2 = basex2 * sin(spinval) + basey2 * cos(spinval)
         }
-        if (id == 'rspin') {
-            x1 = -cos(spinval) * 200 + 400
-            x2 = cos(spinval) * 200 + 400
-            y1 = 200 + sin(spinval) * 200
-            y2 = 200 - sin(spinval) * 200
-        }
-        if (id.includes('rotate')) {
-            
-        }
-
         this.vx1 = (x1 - this.x1) / dt
         this.vy1 = (y1 - this.y1) / dt
         this.vx2 = (x2 - this.x2) / dt
@@ -1338,16 +1477,6 @@ class Wall {
         let { surfaces, id } = this
         save()
         scroll()
-        if (['basic', 'sticky1', 'sticky2'].includes(id)) {
-            beginPath()
-            moveTo(surfaces[0].x1, surfaces[0].y1)
-            for (let surface of surfaces) {
-                lineTo(surface.x2, surface.y2)
-            }
-            closePath()
-            fillStyle = '#000'
-            fill()
-        }
         if (id == 'transparent') {
             beginPath()
             moveTo(surfaces[0].x1, surfaces[0].y1)
@@ -1358,6 +1487,43 @@ class Wall {
             lineWidth = 10
             strokeStyle = 'rgba(200,200,200,0.2)'
             stroke()
+        } else if (id.includes('spike')) {
+            beginPath()
+            moveTo(surfaces[0].x1, surfaces[0].y1)
+            for (let surface of surfaces) {
+                let dx = surface.x2 - surface.x1
+                let dy = surface.y2 - surface.y1
+                let d = dist(dx, dy)
+                let tanx = dx / d
+                let tany = dy / d
+                let normx = -tany
+                let normy = tanx
+                if (id == 'spikeccw') {
+                    normx *= -1
+                    normy *= -1
+                }
+                let h = 20
+                let w = 10
+                let amount = floor(d / w)
+                w = d / amount
+                for (let i = 0; i < amount; i++) {
+                    lineTo(w * tanx * i + surface.x1, w * tany * i + surface.y1)
+                    lineTo(w * tanx * (i + 1 / 2) + surface.x1 + normx * h, w * tany * (i + 1 / 2) + surface.y1 + normy * h)
+                }
+                lineTo(surface.x2, surface.y2)
+            }
+            closePath()
+            fillStyle = '#000'
+            fill()
+        } else {
+            beginPath()
+            moveTo(surfaces[0].x1, surfaces[0].y1)
+            for (let surface of surfaces) {
+                lineTo(surface.x2, surface.y2)
+            }
+            closePath()
+            fillStyle = '#000'
+            fill()
         }
 
         restore()
@@ -1383,13 +1549,13 @@ class Pipe {
         this.active = false
         if (gameState !== 'active') return
         for (let ball of balls) {
-            if (ball.connections.length && norm(ball.x, ball.y, x, y) < sq(range)) {
+            if (ball.connections.length && norm(ball.x, ball.y, x, y) < sq(range) && ball.type != 'bloon') {
                 this.active = true
             }
         }
         if (this.previousActive && !this.active) {
             for (let ball of balls) {
-                if (norm(ball.x, ball.y, x, y) < sq(range) && mouse.draggedBall != ball) {
+                if (norm(ball.x, ball.y, x, y) < sq(range) && mouse.draggedBall != ball && ball.type != 'bloon') {
                     ball.pipeSucked = true
                 }
             }
@@ -1418,6 +1584,8 @@ class Pipe {
             let dy = next[1] - cur[1]
             let nx = dx / dist(dx, dy)
             let ny = dy / dist(dx, dy)
+            let px = -ny
+            let py = nx
             beginPath()
             let e = 34
             let b = lineWidth / 2
@@ -1431,11 +1599,10 @@ class Pipe {
                     let s = 1.05 + 0.05 * sin(ticks / 100)
                     scale(s, s)
                 }
-                moveTo(ny * 25, 0)
-                lineTo(-ny * 25, 0)
-                lineTo(-ny * b, ny * 30)
-                lineTo(ny * b, ny * 30)
-                lineTo(ny * 25, 0)
+                moveTo(px * 25, py * 25)
+                lineTo(-px * 25, -py * 25)
+                lineTo(-px * b + nx * 30, -py * b + ny * 30)
+                lineTo(px * b + nx * 30, py * b + ny * 30)
                 fillStyle = '#333'
                 fill()
                 beginPath()
@@ -1490,14 +1657,14 @@ class Mouse {
                 let cell = boundingBoxes[j]?.[i]
                 if (!cell) continue
                 for (let ball of cell) {
-                    if (ball.seen == seenId || !(ball instanceof Ball) || ball.connections.length == 0) continue
+                    if (ball.seen == seenId || !(ball instanceof Ball) || !ball.connections.length || ball.type == 'bloon') continue
                     ball.seen = seenId
                     closestBalls.push(ball)
                 }
             }
         }
         closestBalls = closestBalls.filter(b => norm(b.x, b.y, x, y) <= sq(maxConnectionLen)).sort((a, b) => norm(a.x, a.y, x, y) - norm(b.x, b.y, x, y))
-        if (closestBalls.length >= 2) {
+        if (draggedBall.type != 'bloon' && closestBalls.length >= 2) {
             for (let i = 0; i < closestBalls.length - 1; i++) {
                 for (let j = i + 1; j < closestBalls.length; j++) {
                     let b1 = closestBalls[i]
@@ -1565,18 +1732,20 @@ class Mouse {
                 for (let ball of cell) {
                     if (ball.seen == seenId || !(ball instanceof Ball) || !ball.detachable && ball.connections.length || !ball.awake) continue
                     ball.seen = seenId
-                    let d = norm(x, y, ball.x, ball.y)
-                    if (d < min(closest, sq(grabRange))) {
+                    let d = dist(x, y, ball.x, ball.y) - sqrt(ball.size)
+                    if (d < min(closest, grabRange)) {
                         closest = d
                         closestBall = ball
                     }
                 }
             }
         }
+        if (any([menuBtn, continueBtn].concat(Object.values(menuBtn.buttons || {})), k => k.hovered)) closestBall = null
         if (draggedBall && draggedBall.connections.length && norm(draggedBall.x, draggedBall.y, x, y) > sq(50 / zoom)) {
             while (draggedBall.connections.length) {
                 draggedBall.connections[0].remove()
             }
+            if (levelStats.collectedBalls < levelStats.minBalls) levelStats.moves++
         }
         if (mouse[0] && !mouse.last[0] && !draggedBall) {
             this.draggedBall = closestBall
@@ -1602,7 +1771,7 @@ class Mouse {
                 if (norm(draggedBall.vx, draggedBall.vy) < 50) {
                     draggedBall.vx = 0
                     draggedBall.vy = 0
-                    if (connections.length) levelStats.moves++
+                    if (connections.length && levelStats.collectedBalls < levelStats.minBalls) levelStats.moves++
                     if (connections.lineConnection) {
                         connect(connections[0], connections[1], draggedBall)
                         draggedBall.remove()
@@ -1948,17 +2117,17 @@ class Button {
             if (id == 'ballsTarget') {
                 text('The amout of balls you collected', x + 90, y - 20, 16)
                 text('Challenge: ' + levelStats.targetBalls + " balls or more", x + 90, y + 30, 16)
-                text('Best: ' + levelChallenges[level].balls + " balls", x + 90, y + 50, 16)
+                levelChallenges[level] && text('Best: ' + levelChallenges[level].balls + " balls", x + 90, y + 50, 16)
             } else if (id == 'movesTarget') {
                 text('The amout of moves you used to', x + 90, y - 20, 16)
                 text('complete the level', x + 90, y, 16)
                 text('Challenge: ' + levelStats.targetMoves + " moves or less", x + 90, y + 30, 16)
-                text('Best: ' + levelChallenges[level].moves + " moves", x + 90, y + 50, 16)
+                levelChallenges[level] && text('Best: ' + levelChallenges[level].moves + " moves", x + 90, y + 50, 16)
             } else if (id == 'timeTarget') {
                 text('The amout of time you used to', x + 90, y - 20, 16)
                 text('complete the level', x + 90, y, 16)
                 text('Challenge: ' + levelStats.targetTime + " seconds or less", x + 90, y + 30, 16)
-                text('Best: ' + floor(levelChallenges[level].time / 1000) + " seconds", x + 90, y + 50, 16)
+                levelChallenges[level] && text('Best: ' + floor(levelChallenges[level].time / 1000) + " seconds", x + 90, y + 50, 16)
             }
 
         }
@@ -2134,6 +2303,7 @@ class FloatText {
             this.y += 1
         }
         if (type == 3) {
+            if (this.t == 'OCD!') pipeText = this
             if (pipeText != this && !this.watch) this.watch = pipeText
             if (this.watch && endLife > time + 300 && this.watch.endLife < time + 1500) {
                 this.endLife = time + 300
@@ -2170,10 +2340,10 @@ class FloatText {
             if (p > 0) {
                 let i = min(1, (2000 - p) / 500)
                 let angle = pi / 6 + 2 * pi * i
-                let radius = 2 * (p < 300 ? p / 300 * size : i * size)
+                let radius = 2 * (p < 300 ? p / 300 * 40 : i * 40)
                 translate(x + radius * cos(angle), -y - radius * sin(angle))
                 rotate(2 * (1 - i))
-                text(t, 0, 0, radius / 2)
+                text(t, 0, 0, radius / 2 * size / 40)
             }
         }
         restore()
@@ -2200,9 +2370,11 @@ class DistinctionPage {
         balls.x = 300
         moves.x = 300
         time.x = 300
-        balls.y = 300
-        moves.y = 500
-        time.y = 700
+        let m = 80
+        let s = canvas.height - m
+        balls.y = s / 4 + m
+        moves.y = s / 2 + m
+        time.y = s / 4 * 3 + m
         balls.tick()
         moves.tick()
         time.tick()
@@ -2225,9 +2397,11 @@ class DistinctionPage {
         text('collect ' + levelStats.targetBalls + ' or more balls', 1400, balls.y + 40, 50)
         text('complete in ' + levelStats.targetMoves + ' or fewer moves', 1400, moves.y + 40, 50)
         text('finish in ' + formatTime(levelStats.targetTime * 1000) + ' or less', 1400, time.y + 40, 50)
-        text('your best: ' + levelChallenges[level].balls + ' balls', 1400, balls.y + 70, 20)
-        text('your best: ' + levelChallenges[level].moves + ' moves', 1400, moves.y + 70, 20)
-        text('your best: ' + formatTime(levelChallenges[level].time), 1400, time.y + 70, 20)
+        if (levelChallenges[level]) {
+            text('your best: ' + levelChallenges[level].balls + ' balls', 1400, balls.y + 70, 20)
+            text('your best: ' + levelChallenges[level].moves + ' moves', 1400, moves.y + 70, 20)
+            text('your best: ' + formatTime(levelChallenges[level].time), 1400, time.y + 70, 20)
+        }
 
     }
 }
@@ -2244,6 +2418,15 @@ let levelInfo = {
     3: [25, 52, 10, 24],
     4: [20, 49, 15, 33],
     5: [8, 29, 15, 33],
+    6: [24, 53, 2, 24],
+    7: [44, 72, 48, 72],
+    8: [6, 24, 28, 56],
+    9: [3, 13, 20, 36],
+    10: [0, 0, 0, 0],
+    11: [0, 0, 0, 0],
+    12: [0, 0, 0, 0],
+    13: [0, 0, 0, 0],
+    14: [0, 0, 0, 0],
 }
 let levelChallenges = (_ => {
     try {
@@ -2261,16 +2444,22 @@ function setupLevel(level) {
     triangles = []
     walls = []
     surfaces = []
+    saws = []
     pipe = null
+    pipeText = null
+    floatingTexts = []
     seenId = 0
+    isScene = false
+    sceneCovers.height = 0
     completeScreen = null
     distinctionPage = new DistinctionPage()
     ticks = 0
     ticksThisSecond = 0
     simulationSpeed = 0
     nextFrame = time
-    //mouse = new Mouse()
+    mouse = new Mouse()
     continueBtn = new Button('continue')
+    menuBtn = new Button('menu')
     gameState = 'active'
     let stats = levelInfo[level] ?? [0, 0, 0, 0]
     levelStats = {
@@ -2305,9 +2494,6 @@ function setupLevel(level) {
             up: 900,
             down: -400
         }
-        scrollx = 500
-        scrolly = -50
-        zoom = 2
     }
     if (level == 2) {
         createSquare(50, 20)
@@ -2328,15 +2514,12 @@ function setupLevel(level) {
         pipe = new Pipe('basic', 1200, 100, 1200, 400, 1350, 400, 1350, 2000)
         scrollLimits = {
             zoomMin: 1,
-            zoomMax: 1.5,
+            zoomMax: 2,
             left: -500,
             right: 1500,
             up: 700,
             down: -700
         }
-        scrollx = 500
-        scrolly = -50
-        zoom = 1.5
     }
     if (level == 3) {
         wall('sticky2', -100, 0, -250, 0, -250, -50, -100, -50)
@@ -2373,9 +2556,6 @@ function setupLevel(level) {
             up: 600,
             down: -700
         }
-        scrollx = 300
-        scrolly = -50
-        zoom = 1.5
     }
     if (level == 4) {
         createSquare(20, 20)
@@ -2399,9 +2579,6 @@ function setupLevel(level) {
             up: 800,
             down: -300
         }
-        scrollx = 300
-        scrolly = -50
-        zoom = 1.5
     }
     if (level == 5) {
         let c = ball(0, 0, 'pin')
@@ -2431,20 +2608,90 @@ function setupLevel(level) {
             up: 1000,
             down: -800
         }
-        scrollx = 350
-        scrolly = -140
-        zoom = 1.5
     }
     if (level == 6) {
-        for(let i  = 0;i<8;i++) {
-            surfaces.push(new Surface(0,0,0,0,'rotate'+i))
+        let s = []
+        for (let i = 0; i <= pi / 4 * 8; i += pi / 4) {
+            s.push(600 * cos(i), 600 * sin(i))
         }
+        for (let i = pi / 4 * 8; i >= 0; i -= pi / 4) {
+            s.push(1000 * cos(i), 1000 * sin(i))
+        }
+        wall('rotate', ...s)
+        createSquare(0, -200, 'green')
+        for (let i = 0; i < 50; i++) {
+            ball(randint(-200, 200), randint(-200, 200), 'green')
+        }
+        pipe = new Pipe('basic', 0, 0, 0, 200, 1000, 200)
+        scrollLimits = {
+            zoomMin: 1.5,
+            zoomMax: 2,
+            left: -650,
+            right: 650,
+            up: 650,
+            down: -650
+        }
+    }
+    if (level == 7) {
+        createSquare(-50, 20, 'white')
+        wall('sticky2', -1000, 0, 1000, 0, 1000, -500, -1000, -500)
+        surfaces.push(new Surface(-1000, 0, -1000, 3000, 'transparent'))
+        surfaces.push(new Surface(1000, 0, 1000, 3000, 'transparent'))
+        pipe = new Pipe('basic', 0, 1800, 0, 3000)
+        for (let i = 0; i < 120; i++) {
+            ball(randint(-600, 600), randint(20, 2200), 'white')
+        }
+        scrollLimits = {
+            zoomMin: 1,
+            zoomMax: 2,
+            left: -1000,
+            right: 1000,
+            up: 2200,
+            down: -500
+        }
+    }
+    if (level == 8) {
+        createSquare(0, 16)
+        balls[0].type = 'pin'
+        balls[1].type = 'pin'
+        wall('basic', 120, 0, -50, 0, -300, 130, -1000, 130, -1000, -500)
+        wall('spikeccw', -1000, -600, 2000, -600, 2000, -400, -1000, -400)
+        wall('spikeccw', -1000, 500, 2000, 500, 2000, 700, -1000, 700)
+        for (let i = 0; i < 45; i++) {
+            ball(randint(0, 100), randint(16, 116))
+        }
+        for (let i = 0; i < 8; i++) {
+            ball(randint(0, 100), randint(16, 116), 'bloon')
+        }
+        for (let i = 0; i < 1; i++) {
+            let a = ball(116, 250, 'bloon')
+            connect(a, balls[3])
+        }
+        for (let i = 0; i < 4; i++) {
+            let a = ball(-20 + 20 * i, 250, 'bloon')
+            connect(a, balls[1])
+        }
+        pipe = new Pipe('basic', 1600, 50, 2300, 50)
+        scrollLimits = {
+            zoomMin: 1,
+            zoomMax: 2,
+            left: -500,
+            right: 2000,
+            up: 600,
+            down: -500
+        }
+    }
+    if (level == 9) {
+        createSquare(-50, 20, 'green')
+        wall('friction', -1000, 0, -600, 0, -350, 2000, -100, 0, 100, 0, 350, 2000, 600, 0, 1000, 0, 1000, -500, -1000, -500)
+        for (let i = 0; i < 10; i++) ball(randint(-200, 200), randint(800, 3000), 'green')
+        pipe = new Pipe('basic', 0, 1000, 0, 2000)
     }
     clampScroll()
     updateScreen()
 }
 
-let level = 6
+let level = 9
 
 resize()
 setupLevel(level)
@@ -2464,11 +2711,6 @@ addEventListener('mouseup', e => {
 })
 addEventListener('contextmenu', e => {
     e.preventDefault();
-})
-addEventListener('beforeunload', e => {
-    localStorage.zoom = zoom
-    localStorage.scrollx = scrollx
-    localStorage.scrolly = scrolly
 })
 addEventListener('keydown', e => {
     e.key == '`' && createSquare(mouse.x, mouse.y)
