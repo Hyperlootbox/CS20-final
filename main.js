@@ -340,8 +340,8 @@ function menuAnimationFrame() {
         scroll()
 
         beginPath()
-        lineWidth = 10
-        arc(x, y, 50, 0, 2 * PI)
+        lineWidth = dist(x, y, mouse.x, mouse.y) < 50?10.5:10
+        arc(x, y, dist(x, y, mouse.x, mouse.y) < 50?52.5:50, 0, 2 * PI)
         let arrow = false
         if (l in levelChallenges) {
             fillStyle = '#00b800'
@@ -378,6 +378,16 @@ function menuAnimationFrame() {
         }
     }
     if (level) setupLevel()
+    scale(1,-1)
+    text('HOW TO PLAY',-900,-350,100)
+    text('Use your mouse to drag balls around',-900,-300,40)
+    text('Use balls to build a structure',-900,-250,40)
+    text('Build to the pipe to collect balls',-900,-200,40)
+    text('Collect as many balls as possible',-900,-150,40)
+    text('Every level has 3 optional challenges',-900,-100,40)
+    text('Click a level to begin. Good luck!',-900,-50,40)
+    text('What are you doing here?',5000,0,60)
+    text('Use number keys to spawn more balls',-990,1990,40)
     restore()
 }
 
@@ -2852,12 +2862,15 @@ function setupLevel() {
                 down: -500
             }
         }
+        if (level == 10) {
+
+        }
         clampScroll()
         updateScreen()
     })
 }
 
-let level = 9
+let level = 10
 
 resize()
 document.body.style.cursor = 'none'
