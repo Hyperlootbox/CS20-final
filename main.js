@@ -222,9 +222,9 @@ function scene() {
     }
     if (level == 2 && ticks < 14000) {
         if (ticks < 6300) {
-            smoothCameraTo(1000, -250, 1200, 100, 900, 6300, 2)
+            smoothCameraTo(800, -250, 1000, 100, 900, 6300, 2)
         } else {
-            smoothCameraTo(1200, 100, 100, 50, 7200, 13000, 2, 1.5)
+            smoothCameraTo(1000, 100, 200, 50, 7200, 13000, 2, 1.5)
         }
         return true
     }
@@ -263,7 +263,7 @@ function scene() {
         return true
     }
     if (level == 8 && ticks < 6300) {
-        smoothCameraTo(800, 50, 400, 50, 0, 6300, 0.7, 1)
+        smoothCameraTo(800, 50, 500, 50, 0, 6300, 0.7, 1)
         return true
     }
     if (level == 9 && ticks < 6300) {
@@ -281,6 +281,105 @@ let simulationSpeed = 0
 let ticksThisSecond = 0
 let ticks = 0
 let isScene = false
+
+let levelBtnPos = {
+    1: [0, 0],
+    2: [300, 200],
+    3: [700, 100],
+    4: [900, -200],
+    5: [1250, -150],
+    6: [1500, 100],
+    7: [1800, 0],
+    8: [2150, 50],
+    9: [2450, -100],
+}
+
+function menuAnimationFrame() {
+    scrollLimits = {
+        zoomMin: 1 / 2,
+        zoomMax: 1,
+        left: -1000,
+        right: 10000,
+        up: 2000,
+        down: -2000
+    }
+    save()
+    scroll()
+    level = null
+    for (let l of Object.keys(levelBtnPos)) {
+        l = parseInt(l)
+        if (l == Object.keys(levelBtnPos).length) continue
+        let [x, y] = levelBtnPos[l]
+        let [x1, y1] = levelBtnPos[l + 1]
+        if (l in levelChallenges) {
+            beginPath()
+            moveTo(x, y)
+            lineTo(x1, y1)
+            strokeStyle = '#888'
+            lineWidth = 20
+            stroke()
+        } else {
+            beginPath()
+            let dx = x1 - x
+            let dy = y1 - y
+            let d = dist(x, y, x1, y1)
+            let tx = dx / d
+            let ty = dy / d
+            for (let i = 0; i < d; i += 100) {
+                moveTo(x + i * tx, y + i * ty)
+                lineTo(x + (i + 40) * tx, y + (i + 40) * ty)
+            }
+            lineCap = 'round'
+            strokeStyle = '#888'
+            lineWidth = 20
+            stroke()
+        }
+    }
+    for (let l of Object.keys(levelBtnPos)) {
+        let [x, y] = levelBtnPos[l]
+        scroll()
+
+        beginPath()
+        lineWidth = 10
+        arc(x, y, 50, 0, 2 * PI)
+        let arrow = false
+        if (l in levelChallenges) {
+            fillStyle = '#00b800'
+            strokeStyle = '#00b000'
+        } else if ((l - 1) in levelChallenges || l == 1) {
+            fillStyle = '#12a1de'
+            strokeStyle = '#1199d4'
+            arrow = true
+        } else {
+            fillStyle = '#555'
+            strokeStyle = '#444'
+        }
+        fill()
+        stroke()
+        if (arrow) {
+            translate(x, y + sin(time / 200) * 50 + 150)
+            beginPath()
+            moveTo(0, 0)
+            lineTo(100, 100)
+            lineTo(40, 100)
+            lineTo(40, 300)
+            lineTo(-40, 300)
+            lineTo(-40, 100)
+            lineTo(-100, 100)
+            closePath()
+            fillStyle = '#d60e00'
+            strokeStyle = '#000'
+            lineWidth = 20
+            fill()
+            stroke()
+        }
+        if (dist(x, y, mouse.x, mouse.y) < 50 && mouse[0] && !mouse.last[0]) {
+            level = l
+        }
+    }
+    if (level) setupLevel()
+    restore()
+}
 
 function gameAnimationFrame() {
     continueBtn.tick()
@@ -308,7 +407,6 @@ function gameAnimationFrame() {
     iterRun(balls, 'draw')
     iterRun(floatingTexts, 'tick')
     iterRun(floatingTexts, 'draw')
-    continueBtn.draw()
     menuBtn.tick()
     !isScene && menuBtn.draw()
     sceneCovers.draw(isScene)
@@ -325,6 +423,7 @@ function gameAnimationFrame() {
         completeScreen.tick()
         completeScreen && completeScreen.draw()
     }
+    continueBtn.draw()
 }
 let sceneCovers = {
     height: 0, draw(on) {
@@ -339,13 +438,37 @@ let sceneCovers = {
     }
 }
 
+let transition = {
+    start: -1000,
+    changeTo(t, func) {
+        if (time-this.start<600) return
+        this.start = time
+        setTimeout(_ => { gameState = t; func() }, 300)
+    },
+    draw() {
+        let start = this.start
+        save()
+        resetTransform()
+        let opacity = 0
+        fillStyle = '#000'
+        if (time - start < 300) {
+            opacity = (time - start) / 300
+        } else if (time - start < 600) {
+            opacity = (600 - time + start) / 300
+        }
+        globalAlpha = opacity
+        fillRect(0, 0, canvas.width, canvas.height);
+        restore()
+    }
+}
+
 function animationFrame() { // raf
     save()
     resetTransform();
     fillStyle = '#999'
     fillRect(0, 0, canvas.width, canvas.height);
     restore()
-    if ((mouse[1] || mouse[0] && !mouse.draggedBall && !mouse.draggedBall) && gameState == 'active') {
+    if ((mouse[1] || mouse[0] && !mouse.draggedBall && !mouse.draggedBall) && (gameState == 'active' || gameState == 'menu')) {
         scrollx -= (mouse.sx - mouse.last.x) / zoom
         scrolly += (mouse.sy - mouse.last.y) / zoom
         clampScroll()
@@ -360,7 +483,11 @@ function animationFrame() { // raf
         distinctionPage.tick()
         distinctionPage.draw()
     }
+    if (gameState == 'menu') {
+        menuAnimationFrame()
+    }
     !isScene && mouse.draw()
+    transition.draw()
     mouse.updateLast()
     if (time < nextFrame) {
         setTimeout(animationFrame, nextFrame - time)
@@ -1793,7 +1920,7 @@ class Mouse {
 
         save()
         scroll()
-        if (closestBall && !mouse[0] || draggedBall) {
+        if ((closestBall && !mouse[0] || draggedBall) && gameState == 'active') {
             const { x, y } = draggedBall || closestBall
             let angle = time / 1000
             translate(x, y)
@@ -1918,15 +2045,26 @@ class Button {
         }
 
         if (id == 'continue') {
-            let targety = -height - 25
-            if (levelStats.collectedBalls >= levelStats.minBalls && gameState == 'active') {
-                if (!levelStats.completionTime) levelStats.completionTime = time
-                targety = 25
+            if (gameState == 'active') {
+                let targety = -height - 25
+                if (levelStats.collectedBalls >= levelStats.minBalls && gameState == 'active') {
+                    if (!levelStats.completionTime) levelStats.completionTime = time
+                    targety = 25
+                }
+                this.x = canvas.width - width - 25
+                this.y += (targety - y) / 5
+                if (abs(this.y - targety) < 3) this.y = targety
+                this.targetexpand = this.hovered ? 1.1 : 1
+            } else if (gameState == 'completed') {
+                let targety = canvas.height + height + 25
+                if (time - completeScreen.start > 2800) {
+                    targety = canvas.height - height - 25
+                }
+                this.x = canvas.width - width - 25
+                this.y += (targety - y) / 5
+                if (abs(this.y - targety) < 3) this.y = targety
+                this.targetexpand = this.hovered ? 1.1 : 1
             }
-            this.x = canvas.width - width - 25
-            this.y += (targety - y) / 5
-            if (abs(this.y - targety) < 3) this.y = targety
-            this.targetexpand = this.hovered ? 1.1 : 1
         }
         if (id.includes('Target')) {
             this.targetAlpha = this.hovered ? 1 : 0
@@ -1972,30 +2110,45 @@ class Button {
     onclick() { // button.onclick
         let { id } = this
         if (id == 'continue') {
-            gameState = 'completed'
-            completeScreen = new CompleteScreen()
-            let completionTime = levelStats.completionTime - levelStats.startTime
-            let challenges = levelChallenges[level] || {}
-            challenges.balls = max(challenges.balls || 0, levelStats.collectedBalls)
-            challenges.moves = challenges.moves == null ? levelStats.moves : min(challenges.moves, levelStats.moves)
-            challenges.time = challenges.time == null ? completionTime : min(challenges.time, completionTime)
-            levelChallenges[level] = challenges
-            localStorage.levelChallenges = JSON.stringify(levelChallenges)
+            if (gameState == 'active') {
+                gameState = 'completed'
+                completeScreen = new CompleteScreen()
+                let completionTime = levelStats.completionTime - levelStats.startTime
+                let challenges = levelChallenges[level] || {}
+                challenges.balls = max(challenges.balls || 0, levelStats.collectedBalls)
+                challenges.moves = challenges.moves == null ? levelStats.moves : min(challenges.moves, levelStats.moves)
+                challenges.time = challenges.time == null ? completionTime : min(challenges.time, completionTime)
+                levelChallenges[level] = challenges
+                localStorage.levelChallenges = JSON.stringify(levelChallenges)
+            } else if (gameState == 'completed') {
+                transition.changeTo('menu', _ => {
+                    scrollx = levelBtnPos[level][0]
+                    scrolly = levelBtnPos[level][1]
+                    zoom = 1
+                })
+            }
         }
         if (id == 'restart') {
-            setupLevel(level)
+            setupLevel()
         }
         if (id == 'retry') {
             menuBtn.expand = false
-            setupLevel(level)
+            setupLevel()
         }
         if (id == 'distinctions') {
             menuBtn.expand = false
-            gameState = 'distinctions'
+            transition.changeTo('distinctions')
         }
         if (id == 'menu') {
             if (gameState != 'active') return
             this.expand = !this.expand
+        }
+        if (id == 'back') {
+            transition.changeTo('menu', _ => {
+                scrollx = levelBtnPos[level][0]
+                scrolly = levelBtnPos[level][1]
+                zoom = 1
+            })
         }
     }
     draw() { // button.draw
@@ -2367,9 +2520,9 @@ class DistinctionPage {
     }
     tick() {
         let { balls, moves, time } = this
-        balls.x = 300
-        moves.x = 300
-        time.x = 300
+        balls.x = canvas.width / 2 - 600
+        moves.x = canvas.width / 2 - 600
+        time.x = canvas.width / 2 - 600
         let m = 80
         let s = canvas.height - m
         balls.y = s / 4 + m
@@ -2394,13 +2547,14 @@ class DistinctionPage {
         moves.draw()
         time.draw()
         textAlign = 'right'
-        text('collect ' + levelStats.targetBalls + ' or more balls', 1400, balls.y + 40, 50)
-        text('complete in ' + levelStats.targetMoves + ' or fewer moves', 1400, moves.y + 40, 50)
-        text('finish in ' + formatTime(levelStats.targetTime * 1000) + ' or less', 1400, time.y + 40, 50)
+        let right = canvas.width / 2 + 600
+        text('collect ' + levelStats.targetBalls + ' or more balls', right, balls.y + 40, 50)
+        text('complete in ' + levelStats.targetMoves + ' or fewer moves', right, moves.y + 40, 50)
+        text('finish in ' + formatTime(levelStats.targetTime * 1000) + ' or less', right, time.y + 40, 50)
         if (levelChallenges[level]) {
-            text('your best: ' + levelChallenges[level].balls + ' balls', 1400, balls.y + 70, 20)
-            text('your best: ' + levelChallenges[level].moves + ' moves', 1400, moves.y + 70, 20)
-            text('your best: ' + formatTime(levelChallenges[level].time), 1400, time.y + 70, 20)
+            text('your best: ' + levelChallenges[level].balls + ' balls', right, balls.y + 70, 20)
+            text('your best: ' + levelChallenges[level].moves + ' moves', right, moves.y + 70, 20)
+            text('your best: ' + formatTime(levelChallenges[level].time), right, time.y + 70, 20)
         }
 
     }
@@ -2421,7 +2575,7 @@ let levelInfo = {
     6: [24, 53, 2, 24],
     7: [44, 72, 48, 72],
     8: [6, 24, 28, 56],
-    9: [3, 13, 20, 36],
+    9: [3, 13, 30, 66],
     10: [0, 0, 0, 0],
     11: [0, 0, 0, 0],
     12: [0, 0, 0, 0],
@@ -2437,264 +2591,275 @@ let levelChallenges = (_ => {
 })()
 
 
-function setupLevel(level) {
-    boundingBoxes = {}
-    balls = []
-    connections = []
-    triangles = []
-    walls = []
-    surfaces = []
-    saws = []
-    pipe = null
-    pipeText = null
-    floatingTexts = []
-    seenId = 0
-    isScene = false
-    sceneCovers.height = 0
-    completeScreen = null
-    distinctionPage = new DistinctionPage()
-    ticks = 0
-    ticksThisSecond = 0
-    simulationSpeed = 0
-    nextFrame = time
-    mouse = new Mouse()
-    continueBtn = new Button('continue')
-    menuBtn = new Button('menu')
-    gameState = 'active'
-    let stats = levelInfo[level] ?? [0, 0, 0, 0]
-    levelStats = {
-        collectedBalls: 0,
-        moves: 0,
-        startTime: time,
-        minBalls: stats[0],
-        targetBalls: stats[1],
-        targetMoves: stats[2],
-        targetTime: stats[3],
-    }
-    if (level == 1) {
-        createSquare(0, 20)
-        wall('sticky1', -700, -500, -700, -300, -500, -150, -300, -50, -100, 0, 200, 0, 400, -50, 500, -100, 600, -150, 700, -150, 800, -100, 900, -75, 1000, -50, 1000, -500)
-        surfaces.push(new Surface(-700, -500, -700, 1000, 'transparent'))
-        surfaces.push(new Surface(1000, -500, 1000, 1000, 'transparent'))
-        for (let i = 0; i < 10; i++) {
-            ball(randfloat(0, 100), randfloat(20, 120), 'black')
+function setupLevel() {
+    let l = level
+    transition.changeTo('active', _ => {
+        level = l
+        boundingBoxes = {}
+        balls = []
+        connections = []
+        triangles = []
+        walls = []
+        surfaces = []
+        saws = []
+        pipe = null
+        pipeText = null
+        floatingTexts = []
+        seenId = 0
+        isScene = false
+        sceneCovers.height = 0
+        completeScreen = null
+        distinctionPage = new DistinctionPage()
+        ticks = 0
+        ticksThisSecond = 0
+        simulationSpeed = 0
+        nextFrame = time
+        mouse = new Mouse()
+        continueBtn = new Button('continue')
+        menuBtn = new Button('menu')
+        gameState = 'active'
+        let stats = levelInfo[level] ?? [0, 0, 0, 0]
+        levelStats = {
+            collectedBalls: 0,
+            moves: 0,
+            startTime: time,
+            minBalls: stats[0],
+            targetBalls: stats[1],
+            targetMoves: stats[2],
+            targetTime: stats[3],
         }
-        for (let i = 0; i < 2; i++) {
-            ball(randfloat(-600, 0), randfloat(500, 900), 'black')
-        }
-        for (let i = 0; i < 3; i++) {
-            ball(randfloat(100, 900), randfloat(500, 900), 'black')
-        }
-        pipe = new Pipe('basic', 50, 400, 50, 600, -75, 600, -75, 750, 100, 750, 100, 1200)
-        scrollLimits = {
-            zoomMin: 2,
-            zoomMax: 3,
-            left: -700,
-            right: 1000,
-            up: 900,
-            down: -400
-        }
-    }
-    if (level == 2) {
-        createSquare(50, 20)
-        wall('basic', -500, 0, 200, 0, 250, -25, 275, -50, 275, -75, 0, -1000, -500, -1000)
-        surfaces[0].sticky = 90
-        wall('sticky2', 700, -300, 1500, -300, 1500, -1000)
-        surfaces.push(new Surface(-500, -1000, -500, 2000, 'transparent'))
-        surfaces.push(new Surface(1500, -1000, 1500, 2000, 'transparent'))
-        for (let i = 0; i < 15; i++) {
-            ball(randfloat(50, 150), randfloat(20, 120), 'black')
-        }
-        for (let i = 0; i < 5; i++) {
-            ball(randfloat(-450, 0), randfloat(50, 100), 'black')
-        }
-        for (let i = 0; i < 12; i++) {
-            ball(800 + 40 * i, -280, 'black', false)
-        }
-        pipe = new Pipe('basic', 1200, 100, 1200, 400, 1350, 400, 1350, 2000)
-        scrollLimits = {
-            zoomMin: 1,
-            zoomMax: 2,
-            left: -500,
-            right: 1500,
-            up: 700,
-            down: -700
-        }
-    }
-    if (level == 3) {
-        wall('sticky2', -100, 0, -250, 0, -250, -50, -100, -50)
-        wall('sticky2', 100, 0, 250, 0, 250, -50, 100, -50)
-        wall('basic', -700, -400, -250, -500, -100, -600, 100, -600, 250, -500, 700, -400, 700, -1000, -700, -1000)
-        surfaces.push(new Surface(-700, -1000, -700, 2000, 'transparent'))
-        surfaces.push(new Surface(700, -1000, 700, 2000, 'transparent'))
-        let a = ball(-120, 20, 'white')
-        let b = ball(-50, -55, 'white')
-        let c = ball(50, -55, 'white')
-        let d = ball(120, 20, 'white')
-        let c1 = connect(a, b)
-        let c2 = connect(b, c)
-        let c3 = connect(c, d)
-        for (let i = 0; i < 12; i++) {
-            let q = ball(0, 0, 'white')
-            q.structureMove.active = true
-            let choice = [c1, c2, c3][randint(0, 3)]
-            q.structureMove.currentConnection = choice
-            q.structureMove.previousNode = random() > 0.5 ? choice.a : choice.b
-            q.structureMove.t = random()
-        }
-        for (let i = 0; i < 10; i++) {
-            for (let j = 0; j < 5; j++) {
-                ball(-100 + 30 * i, -400 - j * 30, 'white', false)
+        if (level == 1) {
+            createSquare(0, 20)
+            wall('sticky1', -700, -500, -700, -300, -500, -150, -300, -50, -100, 0, 200, 0, 400, -50, 500, -100, 600, -150, 700, -150, 800, -100, 900, -75, 1000, -50, 1000, -500)
+            surfaces.push(new Surface(-700, -500, -700, 1000, 'transparent'))
+            surfaces.push(new Surface(1000, -500, 1000, 1000, 'transparent'))
+            for (let i = 0; i < 10; i++) {
+                ball(randfloat(0, 100), randfloat(20, 120), 'black')
+            }
+            for (let i = 0; i < 2; i++) {
+                ball(randfloat(-600, 0), randfloat(500, 900), 'black')
+            }
+            for (let i = 0; i < 3; i++) {
+                ball(randfloat(100, 900), randfloat(500, 900), 'black')
+            }
+            pipe = new Pipe('basic', 50, 400, 50, 600, -75, 600, -75, 750, 100, 750, 100, 1200)
+            scrollLimits = {
+                zoomMin: 2,
+                zoomMax: 3,
+                left: -700,
+                right: 1000,
+                up: 900,
+                down: -400
             }
         }
-        pipe = new Pipe('basic', 0, 400, 0, 1000)
-        scrollLimits = {
-            zoomMin: 1.5,
-            zoomMax: 2,
-            left: -700,
-            right: 700,
-            up: 600,
-            down: -700
+        if (level == 2) {
+            createSquare(50, 20)
+            wall('basic', -500, 0, 200, 0, 250, -25, 275, -50, 275, -75, 0, -1000, -500, -1000)
+            surfaces[0].sticky = 90
+            wall('sticky2', 700, -300, 1500, -300, 1500, -1000)
+            surfaces.push(new Surface(-500, -1000, -500, 2000, 'transparent'))
+            surfaces.push(new Surface(1500, -1000, 1500, 2000, 'transparent'))
+            for (let i = 0; i < 15; i++) {
+                ball(randfloat(50, 150), randfloat(20, 120), 'black')
+            }
+            for (let i = 0; i < 5; i++) {
+                ball(randfloat(-450, 0), randfloat(50, 100), 'black')
+            }
+            for (let i = 0; i < 12; i++) {
+                ball(800 + 40 * i, -280, 'black', false)
+            }
+            pipe = new Pipe('basic', 1200, 100, 1200, 400, 1350, 400, 1350, 2000)
+            scrollLimits = {
+                zoomMin: 1,
+                zoomMax: 2,
+                left: -500,
+                right: 1500,
+                up: 700,
+                down: -700
+            }
         }
-    }
-    if (level == 4) {
-        createSquare(20, 20)
-        wall('sticky2', 0, 0, 400, 0, 500, -50, 600, 0, 675, 100, 600, 200, -150, 300, -175, 350, -150, 400, 1000, 400, 1000, -500, 0, -200)
-        saw(-125, 320, 75)
-        for (let i = 0; i < 20; i++) {
-            ball(randint(20, 120), randint(20, 120))
+        if (level == 3) {
+            wall('sticky2', -100, 0, -250, 0, -250, -50, -100, -50)
+            wall('sticky2', 100, 0, 250, 0, 250, -50, 100, -50)
+            wall('basic', -700, -400, -250, -500, -100, -600, 100, -600, 250, -500, 700, -400, 700, -1000, -700, -1000)
+            surfaces.push(new Surface(-700, -1000, -700, 2000, 'transparent'))
+            surfaces.push(new Surface(700, -1000, 700, 2000, 'transparent'))
+            let a = ball(-120, 20, 'white')
+            let b = ball(-50, -55, 'white')
+            let c = ball(50, -55, 'white')
+            let d = ball(120, 20, 'white')
+            let c1 = connect(a, b)
+            let c2 = connect(b, c)
+            let c3 = connect(c, d)
+            for (let i = 0; i < 12; i++) {
+                let q = ball(0, 0, 'white')
+                q.structureMove.active = true
+                let choice = [c1, c2, c3][randint(0, 3)]
+                q.structureMove.currentConnection = choice
+                q.structureMove.previousNode = random() > 0.5 ? choice.a : choice.b
+                q.structureMove.t = random()
+            }
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 5; j++) {
+                    ball(-100 + 30 * i, -400 - j * 30, 'white', false)
+                }
+            }
+            pipe = new Pipe('basic', 0, 400, 0, 1000)
+            scrollLimits = {
+                zoomMin: 1.5,
+                zoomMax: 2,
+                left: -700,
+                right: 700,
+                up: 600,
+                down: -700
+            }
         }
-        for (let [x, y] of [[225, 15], [581, 8], [499, -32], [525, 10], [257, 15], [403, 39], [472, -18], [497, 26], [470, 11], [352, 15], [442, 26], [484, 85], [415, 9], [444, -4], [498, -3], [553, -5], [383, 15], [289, 15], [320, 15], [526, -19], [429, 55], [470, 42], [552, 24], [336, 43], [607, 36], [578, 39], [626, 61], [525, 41], [457, 70], [497, 57], [552, 56], [525, 72], [595, 65], [568, 82]]) {
-            ball(x, y + 1)
+        if (level == 4) {
+            createSquare(20, 20)
+            wall('sticky2', 0, 0, 400, 0, 500, -50, 600, 0, 675, 100, 600, 200, -150, 300, -175, 350, -150, 400, 1000, 400, 1000, -500, 0, -200)
+            saw(-125, 320, 75)
+            for (let i = 0; i < 20; i++) {
+                ball(randint(20, 120), randint(20, 120))
+            }
+            for (let [x, y] of [[225, 15], [581, 8], [499, -32], [525, 10], [257, 15], [403, 39], [472, -18], [497, 26], [470, 11], [352, 15], [442, 26], [484, 85], [415, 9], [444, -4], [498, -3], [553, -5], [383, 15], [289, 15], [320, 15], [526, -19], [429, 55], [470, 42], [552, 24], [336, 43], [607, 36], [578, 39], [626, 61], [525, 41], [457, 70], [497, 57], [552, 56], [525, 72], [595, 65], [568, 82]]) {
+                ball(x, y + 1)
+            }
+            for (let i = -100; i < 400; i += 40) {
+                ball(i, 416, 'black', false)
+            }
+            pipe = new Pipe('basic', 300, 600, 300, 1000)
+            scrollLimits = {
+                zoomMin: 1.5,
+                zoomMax: 2,
+                left: -700,
+                right: 800,
+                up: 800,
+                down: -300
+            }
         }
-        for (let i = -100; i < 400; i += 40) {
-            ball(i, 416, 'black', false)
+        if (level == 5) {
+            let c = ball(0, 0, 'pin')
+            let r = 200
+            let p = null
+            for (let i = 0; i < 2 * pi; i += pi / 5) {
+                let a = ball(r * cos(i), r * sin(i), 'steel')
+                connect(a, c)
+                if (p) connect(a, p)
+                p = a
+            }
+            connect(balls[1], p)
+            for (let i = 0; i < 30; i++) {
+                let q = ball(0, 0, 'green')
+                q.structureMove.active = true
+                let choice = randchoice(connections)
+                q.structureMove.currentConnection = choice
+                q.structureMove.previousNode = random() > 0.5 ? choice.a : choice.b
+                q.structureMove.t = random()
+            }
+            pipe = new Pipe('basic', 0, 700, 0, 2000)
+            scrollLimits = {
+                zoomMin: 1.5,
+                zoomMax: 2,
+                left: -1000,
+                right: 1000,
+                up: 1000,
+                down: -800
+            }
         }
-        pipe = new Pipe('basic', 300, 600, 300, 1000)
-        scrollLimits = {
-            zoomMin: 1.5,
-            zoomMax: 2,
-            left: -700,
-            right: 800,
-            up: 800,
-            down: -300
+        if (level == 6) {
+            let s = []
+            for (let i = 0; i <= pi / 4 * 8; i += pi / 4) {
+                s.push(600 * cos(i), 600 * sin(i))
+            }
+            for (let i = pi / 4 * 8; i >= 0; i -= pi / 4) {
+                s.push(1000 * cos(i), 1000 * sin(i))
+            }
+            wall('rotate', ...s)
+            createSquare(0, -200, 'green')
+            for (let i = 0; i < 50; i++) {
+                ball(randint(-200, 200), randint(-200, 200), 'green')
+            }
+            pipe = new Pipe('basic', 0, 0, 0, 200, 1000, 200)
+            scrollLimits = {
+                zoomMin: 1.5,
+                zoomMax: 2,
+                left: -650,
+                right: 650,
+                up: 650,
+                down: -650
+            }
         }
-    }
-    if (level == 5) {
-        let c = ball(0, 0, 'pin')
-        let r = 200
-        let p = null
-        for (let i = 0; i < 2 * pi; i += pi / 5) {
-            let a = ball(r * cos(i), r * sin(i), 'steel')
-            connect(a, c)
-            if (p) connect(a, p)
-            p = a
+        if (level == 7) {
+            createSquare(-50, 20, 'white')
+            wall('sticky2', -1000, 0, 1000, 0, 1000, -500, -1000, -500)
+            surfaces.push(new Surface(-1000, 0, -1000, 3000, 'transparent'))
+            surfaces.push(new Surface(1000, 0, 1000, 3000, 'transparent'))
+            pipe = new Pipe('basic', 0, 1800, 0, 3000)
+            for (let i = 0; i < 120; i++) {
+                ball(randint(-600, 600), randint(20, 2200), 'white')
+            }
+            scrollLimits = {
+                zoomMin: 1,
+                zoomMax: 2,
+                left: -1000,
+                right: 1000,
+                up: 2200,
+                down: -500
+            }
         }
-        connect(balls[1], p)
-        for (let i = 0; i < 30; i++) {
-            let q = ball(0, 0, 'green')
-            q.structureMove.active = true
-            let choice = randchoice(connections)
-            q.structureMove.currentConnection = choice
-            q.structureMove.previousNode = random() > 0.5 ? choice.a : choice.b
-            q.structureMove.t = random()
+        if (level == 8) {
+            createSquare(0, 16)
+            balls[0].type = 'pin'
+            balls[1].type = 'pin'
+            wall('basic', 120, 0, -50, 0, -300, 130, -1000, 130, -1000, -500)
+            wall('spikeccw', -1000, -600, 3000, -600, 3000, -400, -1000, -400)
+            wall('spikeccw', -1000, 500, 3000, 500, 3000, 700, -1000, 700)
+            for (let i = 0; i < 45; i++) {
+                ball(randint(0, 100), randint(16, 116))
+            }
+            for (let i = 0; i < 8; i++) {
+                ball(randint(0, 100), randint(16, 116), 'bloon')
+            }
+            for (let i = 0; i < 1; i++) {
+                let a = ball(116, 250, 'bloon')
+                connect(a, balls[3])
+            }
+            for (let i = 0; i < 4; i++) {
+                let a = ball(-20 + 20 * i, 250, 'bloon')
+                connect(a, balls[1])
+            }
+            pipe = new Pipe('basic', 1600, 50, 2300, 50)
+            scrollLimits = {
+                zoomMin: 1,
+                zoomMax: 2,
+                left: -500,
+                right: 2000,
+                up: 600,
+                down: -500
+            }
         }
-        pipe = new Pipe('basic', 0, 700, 0, 2000)
-        scrollLimits = {
-            zoomMin: 1.5,
-            zoomMax: 2,
-            left: -1000,
-            right: 1000,
-            up: 1000,
-            down: -800
+        if (level == 9) {
+            createSquare(-50, 20, 'green')
+            wall('friction', -1000, 0, -600, 0, -350, 2000, -100, 0, 100, 0, 350, 2000, 600, 0, 1000, 0, 1000, -500, -1000, -500)
+            for (let i = 0; i < 10; i++) ball(randint(-200, 200), randint(800, 3000), 'green')
+            pipe = new Pipe('basic', 0, 1000, 0, 2000)
+            scrollLimits = {
+                zoomMin: 2,
+                zoomMax: 3,
+                left: -600,
+                right: 600,
+                up: 1400,
+                down: -500
+            }
         }
-    }
-    if (level == 6) {
-        let s = []
-        for (let i = 0; i <= pi / 4 * 8; i += pi / 4) {
-            s.push(600 * cos(i), 600 * sin(i))
-        }
-        for (let i = pi / 4 * 8; i >= 0; i -= pi / 4) {
-            s.push(1000 * cos(i), 1000 * sin(i))
-        }
-        wall('rotate', ...s)
-        createSquare(0, -200, 'green')
-        for (let i = 0; i < 50; i++) {
-            ball(randint(-200, 200), randint(-200, 200), 'green')
-        }
-        pipe = new Pipe('basic', 0, 0, 0, 200, 1000, 200)
-        scrollLimits = {
-            zoomMin: 1.5,
-            zoomMax: 2,
-            left: -650,
-            right: 650,
-            up: 650,
-            down: -650
-        }
-    }
-    if (level == 7) {
-        createSquare(-50, 20, 'white')
-        wall('sticky2', -1000, 0, 1000, 0, 1000, -500, -1000, -500)
-        surfaces.push(new Surface(-1000, 0, -1000, 3000, 'transparent'))
-        surfaces.push(new Surface(1000, 0, 1000, 3000, 'transparent'))
-        pipe = new Pipe('basic', 0, 1800, 0, 3000)
-        for (let i = 0; i < 120; i++) {
-            ball(randint(-600, 600), randint(20, 2200), 'white')
-        }
-        scrollLimits = {
-            zoomMin: 1,
-            zoomMax: 2,
-            left: -1000,
-            right: 1000,
-            up: 2200,
-            down: -500
-        }
-    }
-    if (level == 8) {
-        createSquare(0, 16)
-        balls[0].type = 'pin'
-        balls[1].type = 'pin'
-        wall('basic', 120, 0, -50, 0, -300, 130, -1000, 130, -1000, -500)
-        wall('spikeccw', -1000, -600, 2000, -600, 2000, -400, -1000, -400)
-        wall('spikeccw', -1000, 500, 2000, 500, 2000, 700, -1000, 700)
-        for (let i = 0; i < 45; i++) {
-            ball(randint(0, 100), randint(16, 116))
-        }
-        for (let i = 0; i < 8; i++) {
-            ball(randint(0, 100), randint(16, 116), 'bloon')
-        }
-        for (let i = 0; i < 1; i++) {
-            let a = ball(116, 250, 'bloon')
-            connect(a, balls[3])
-        }
-        for (let i = 0; i < 4; i++) {
-            let a = ball(-20 + 20 * i, 250, 'bloon')
-            connect(a, balls[1])
-        }
-        pipe = new Pipe('basic', 1600, 50, 2300, 50)
-        scrollLimits = {
-            zoomMin: 1,
-            zoomMax: 2,
-            left: -500,
-            right: 2000,
-            up: 600,
-            down: -500
-        }
-    }
-    if (level == 9) {
-        createSquare(-50, 20, 'green')
-        wall('friction', -1000, 0, -600, 0, -350, 2000, -100, 0, 100, 0, 350, 2000, 600, 0, 1000, 0, 1000, -500, -1000, -500)
-        for (let i = 0; i < 10; i++) ball(randint(-200, 200), randint(800, 3000), 'green')
-        pipe = new Pipe('basic', 0, 1000, 0, 2000)
-    }
-    clampScroll()
-    updateScreen()
+        clampScroll()
+        updateScreen()
+    })
 }
 
 let level = 9
 
 resize()
-setupLevel(level)
 document.body.style.cursor = 'none'
 addEventListener('resize', resize)
 addEventListener('mousemove', e => {
@@ -2718,7 +2883,7 @@ addEventListener('keydown', e => {
     ball(mouse.x, mouse.y, Object.keys(ballStats)[parseInt(e.key) - 1])
 })
 document.addEventListener('wheel', e => {
-    if (gameState != 'active') return
+    if (gameState != 'active' && gameState != 'menu') return
     let o = screenToWorld(mouse.sx, mouse.sy)
     if (e.deltaY > 0) {
         zoom /= 1.2
