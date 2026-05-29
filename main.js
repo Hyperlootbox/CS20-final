@@ -380,14 +380,15 @@ function menuAnimationFrame() {
     if (level) setupLevel()
     scale(1,-1)
     text('HOW TO PLAY',-900,-350,100)
-    text('Use your mouse to drag balls around',-900,-300,40)
-    text('Use balls to build a structure',-900,-250,40)
-    text('Build to the pipe to collect balls',-900,-200,40)
-    text('Collect as many balls as possible',-900,-150,40)
-    text('Every level has 3 optional challenges',-900,-100,40)
-    text('Click a level to begin. Good luck!',-900,-50,40)
+    text('Drag loose balls with the mouse.',-900,-300,38)
+    text('Release near other balls to connect them.',-900,-255,38)
+    text('Build a path so balls can reach the pipe.',-900,-210,38)
+    text('The pipe collects balls when they get close enough.',-900,-165,38)
+    text('Use the mouse wheel to zoom in and out.',-900,-120,38)
+    text('Drag empty space to pan around the level.',-900,-75,38)
+    text('Each level has 3 optional challenges.',-900,-30,38)
+    text('Click the next blue level to start. Good luck!',-900,15,38)
     text('What are you doing here?',5000,0,60)
-    text('Use number keys to spawn more balls',-990,1990,40)
     restore()
 }
 
@@ -453,7 +454,7 @@ let transition = {
     changeTo(t, func) {
         if (time-this.start<600) return
         this.start = time
-        setTimeout(_ => { gameState = t; func() }, 300)
+        setTimeout(_ => { gameState = t; func&&func() }, 300)
     },
     draw() {
         let start = this.start
@@ -478,7 +479,7 @@ function animationFrame() { // raf
     fillStyle = '#999'
     fillRect(0, 0, canvas.width, canvas.height);
     restore()
-    if ((mouse[1] || mouse[0] && !mouse.draggedBall && !mouse.draggedBall) && (gameState == 'active' || gameState == 'menu')) {
+    if ((mouse[1] || mouse[0] && !mouse.draggedBall) && (gameState == 'active' || gameState == 'menu')) {
         scrollx -= (mouse.sx - mouse.last.x) / zoom
         scrolly += (mouse.sy - mouse.last.y) / zoom
         clampScroll()
@@ -902,7 +903,7 @@ class Ball {
                         }
                     }
                 } else {
-                    if (d < pipe.range / 2 && !mouse.draggedBall == this) {
+                    if (d < pipe.range / 2 && mouse.draggedBall != this) {
                         this.pipeSucked = true
                         return
                     }
@@ -2278,16 +2279,16 @@ class Button {
             fillStyle = 'rgba(100,100,100,0.5)'
             fillRect(x + 80, y - 39, 300, 100)
             if (id == 'ballsTarget') {
-                text('The amout of balls you collected', x + 90, y - 20, 16)
+                text('The amount of balls you collected', x + 90, y - 20, 16)
                 text('Challenge: ' + levelStats.targetBalls + " balls or more", x + 90, y + 30, 16)
                 levelChallenges[level] && text('Best: ' + levelChallenges[level].balls + " balls", x + 90, y + 50, 16)
             } else if (id == 'movesTarget') {
-                text('The amout of moves you used to', x + 90, y - 20, 16)
+                text('The amount of moves you used to', x + 90, y - 20, 16)
                 text('complete the level', x + 90, y, 16)
                 text('Challenge: ' + levelStats.targetMoves + " moves or less", x + 90, y + 30, 16)
                 levelChallenges[level] && text('Best: ' + levelChallenges[level].moves + " moves", x + 90, y + 50, 16)
             } else if (id == 'timeTarget') {
-                text('The amout of time you used to', x + 90, y - 20, 16)
+                text('The amount of time you used to', x + 90, y - 20, 16)
                 text('complete the level', x + 90, y, 16)
                 text('Challenge: ' + levelStats.targetTime + " seconds or less", x + 90, y + 30, 16)
                 levelChallenges[level] && text('Best: ' + floor(levelChallenges[level].time / 1000) + " seconds", x + 90, y + 50, 16)
@@ -2545,6 +2546,7 @@ class DistinctionPage {
     }
     draw() {
         let { balls, moves, time } = this
+        save()
         fillStyle = '#111'
         fillRect(0, 0, canvas.width, canvas.height);
         textAlign = 'center'
@@ -2566,6 +2568,7 @@ class DistinctionPage {
             text('your best: ' + levelChallenges[level].moves + ' moves', right, moves.y + 70, 20)
             text('your best: ' + formatTime(levelChallenges[level].time), right, time.y + 70, 20)
         }
+        restore()
 
     }
 }
@@ -2889,11 +2892,6 @@ addEventListener('mouseup', e => {
 })
 addEventListener('contextmenu', e => {
     e.preventDefault();
-})
-addEventListener('keydown', e => {
-    e.key == '`' && createSquare(mouse.x, mouse.y)
-    if (!Object.keys(ballStats)[parseInt(e.key) - 1]) return
-    ball(mouse.x, mouse.y, Object.keys(ballStats)[parseInt(e.key) - 1])
 })
 document.addEventListener('wheel', e => {
     if (gameState != 'active' && gameState != 'menu') return
